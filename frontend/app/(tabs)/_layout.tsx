@@ -2,11 +2,12 @@ import { Image, View, Text } from 'react-native'
 import {icons} from '../../constants/icons';
 import React from 'react'
 import { Tabs } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 // @ts-ignore: Side-effect CSS import without type declarations
 
 import '@/global.css'
 
-const TabIcon = ({focused, icon, title}:any) => {
+const TabIcon = ({focused, icon, title, iconName}:any) => {
     
     if (focused){
         return (
@@ -24,9 +25,13 @@ const TabIcon = ({focused, icon, title}:any) => {
                     overflow: 'hidden',
                 }}
             >
-                <Image source = {icon}
-                tintColor="#151312" style={{ width: 20, height: 20 }} 
-                />
+                {iconName ? (
+                    <Ionicons name={iconName} size={20} color="#151312" />
+                ) : (
+                    <Image source={icon}
+                        tintColor="#151312" style={{ width: 20, height: 20 }} 
+                    />
+                )}
 
                 <Text style={{ color:'#151312', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>{title}</Text>
 
@@ -36,7 +41,11 @@ const TabIcon = ({focused, icon, title}:any) => {
 
     return(
         <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', marginTop: 16, borderRadius: 9999 }}>
-            <Image source={icon} tintColor="#A8B5DB" style={{ width: 20, height: 20 }}/>
+            {iconName ? (
+                <Ionicons name={iconName} size={20} color="#A8B5DB" />
+            ) : (
+                <Image source={icon} tintColor="#A8B5DB" style={{ width: 20, height: 20 }}/>
+            )}
         </View>
     )
 }
@@ -97,6 +106,21 @@ const _layout = () => {
         />
 
         <Tabs.Screen
+            name = "quran"
+            options = {{
+                title: "Quran",
+                headerShown: false,
+                tabBarIcon: ({focused}) => (
+                    <>
+                        <TabIcon focused= {focused} 
+                            iconName="book"
+                            title=""/>
+                    </>
+                )
+            }}
+        />
+
+        <Tabs.Screen
             name = "Settings"
             options = {{
                 title: "Settings",
@@ -109,8 +133,7 @@ const _layout = () => {
                     </>
                 )
             }}
-        />       
-
+        /> 
     </Tabs>    
   )
 }

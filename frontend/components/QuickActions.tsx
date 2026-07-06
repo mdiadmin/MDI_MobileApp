@@ -6,6 +6,7 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import { useRouter, Href } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors, shadows } from '@/constants/theme';
 
@@ -14,13 +15,14 @@ type QuickAction = {
   label: string;
   color: string;
   bg: string;
+  route?: string;
 };
 
 const QUICK_ACTIONS: QuickAction[] = [
   { icon: 'bullhorn-outline', label: 'Announcements', color: colors.primary, bg: colors.secondary },
   { icon: 'calendar-outline', label: 'Events', color: colors.accent, bg: colors.accentBg },
   { icon: 'television', label: 'Livestream', color: colors.primary, bg: colors.secondary },
-  { icon: 'book-open-variant', label: 'Quran', color: colors.accent, bg: colors.accentBg },
+  { icon: 'book-open-variant', label: 'Quran', color: colors.accent, bg: colors.accentBg, route: '/quran' },
   { icon: 'map-marker-outline', label: 'Location', color: colors.primary, bg: colors.secondary },
   { icon: 'account-group-outline', label: 'Volunteer', color: colors.accent, bg: colors.accentBg },
 ];
@@ -30,6 +32,7 @@ const GAP = 12;
 
 export default function QuickActions() {
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const itemWidth = (width - HORIZONTAL_PADDING * 2 - GAP * 2) / 3;
 
   return (
@@ -37,11 +40,12 @@ export default function QuickActions() {
       <Text style={styles.title}>Quick Access</Text>
 
       <View style={styles.grid}>
-        {QUICK_ACTIONS.map(({ icon, label, color, bg }) => (
+        {QUICK_ACTIONS.map(({ icon, label, color, bg, route }) => (
           <TouchableOpacity
             key={label}
             style={[styles.actionButton, shadows.action, { width: itemWidth }]}
             activeOpacity={0.85}
+            onPress={route ? () => router.push(route as Href) : undefined}
           >
             <View style={[styles.iconWrap, { backgroundColor: bg }]}>
               <MaterialCommunityIcons name={icon} size={20} color={color} />
