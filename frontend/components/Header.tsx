@@ -20,7 +20,6 @@ const Header = () => {
     <>
       <StatusBar
         animated
-        translucent
         backgroundColor="transparent"
         barStyle="light-content"
       />
