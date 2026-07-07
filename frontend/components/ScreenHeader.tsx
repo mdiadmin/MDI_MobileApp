@@ -48,10 +48,23 @@ export default function ScreenHeader({
           </TouchableOpacity>
         )}
 
-        <View style={styles.content}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
+        {showBack && onBack ? (
+          <TouchableOpacity
+            onPress={onBack}
+            activeOpacity={0.85}
+            style={styles.content}
+            accessibilityRole="button"
+            accessibilityLabel="Back to list"
+          >
+            <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.content}>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+        )}
       </View>
     </>
   );

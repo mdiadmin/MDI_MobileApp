@@ -121,6 +121,21 @@ const _layout = () => {
         />
 
         <Tabs.Screen
+            name = "QiblaFinder"
+            options = {{
+                title: "QiblaFinder",
+                headerShown: false,
+                tabBarIcon: ({focused}) => (
+                    <>
+                        <TabIcon focused= {focused} 
+                            iconName="compass"
+                            title=""/>
+                    </>
+                )
+            }}
+        />
+
+        <Tabs.Screen
             name = "Settings"
             options = {{
                 title: "Settings",

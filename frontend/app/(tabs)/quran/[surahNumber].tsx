@@ -57,7 +57,7 @@ export default function SurahDetailScreen() {
         title={surahMeta.englishName}
         subtitle={`${surahMeta.name} · ${surahMeta.revelationType}`}
         showBack
-        onBack={() => router.back()}
+        onBack={() => router.push('/quran')}
       />
 
       <View style={[styles.infoCard, shadows.card]}>
