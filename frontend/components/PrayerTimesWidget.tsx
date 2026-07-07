@@ -1,10 +1,10 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
-import { WebView } from 'react-native-webview';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { colors, shadows } from '@/constants/theme';
 
 const PRAYER_TIMES_URL = 'https://portal.ad-din.ca/public/mediumdisplay/542';
-const WIDGET_HEIGHT = 320;
+const INITIAL_WIDGET_HEIGHT = 320; // Fallback height while loading
 
 const buildInjectedCss = () => `
   * {
@@ -17,6 +17,7 @@ const buildInjectedCss = () => `
     margin: 0;
     padding: 0;
     color: ${colors.foreground} !important;
+    overflow: hidden !important;
   }
 
   body {
@@ -32,18 +33,14 @@ const buildInjectedCss = () => `
     padding: 0 !important;
   }
 
-  .datetime {
-    display: none !important;
-  }
-
-  .head-part {
+  .datetime, .head-part {
     display: none !important;
   }
 
   .table {
     width: 100% !important;
     background-color: ${colors.card} !important;
-    border-radius: 24px !important;
+    border-radius: 16px !important;
     overflow: hidden !important;
     border: 1px solid rgba(27, 94, 56, 0.08) !important;
     box-shadow: 0 16px 40px rgba(27, 94, 56, 0.08) !important;
@@ -53,7 +50,7 @@ const buildInjectedCss = () => `
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    padding: 16px 18px !important;
+    padding: 14px 16px !important;
     gap: 12px !important;
     border-bottom: 1px solid rgba(27, 94, 56, 0.08) !important;
     background-color: ${colors.card} !important;
@@ -76,7 +73,7 @@ const buildInjectedCss = () => `
 
   .tr.trfirst {
     background-color: rgba(27, 94, 56, 0.04) !important;
-    padding: 14px 18px !important;
+    padding: 12px 16px !important;
   }
 
   .tr.trfirst .th,
@@ -139,7 +136,6 @@ const buildInjectedCss = () => `
     color: ${colors.foreground} !important;
   }
 
-  /* Fixed Highlight Row Specificity */
   .table .tr.highlight,
   .tr.highlight:not(.trfirst) {
     background-color: #1B5E38 !important;
@@ -160,28 +156,19 @@ const buildInjectedCss = () => `
     font-weight: 700 !important;
   }
 
-  /* Hide Arabic subtitles + the "time until next prayer" caption */
   .smal:not(.tdfirst):not(.td):not(.tdlast) {
     display: none !important;
   }
 
-  .footer,
-  .footer *,
-  .footer img {
-    display: none !important;
-  }
-
-  .tr img,
-  .th img,
-  .masjid-icon,
-  .masjid-icon img {
+  .footer, .footer *, .footer img,
+  .tr img, .th img, .masjid-icon, .masjid-icon img {
     display: none !important;
   }
 `;
 
 export default function PrayerTimesWidget() {
-  const { width } = useWindowDimensions();
   const webviewRef = useRef<React.ComponentRef<typeof WebView> | null>(null);
+  const [realHeight, setRealHeight] = useState(INITIAL_WIDGET_HEIGHT);
 
   const injectedJs = `
     (function() {
@@ -191,9 +178,26 @@ export default function PrayerTimesWidget() {
       style.id = '__app_injected_style__';
       style.innerHTML = ${JSON.stringify(buildInjectedCss())};
       document.head.appendChild(style);
+
+      // Measure widget size and dispatch to React Native
+      setTimeout(function() {
+        var height = document.documentElement.scrollHeight || document.body.scrollHeight;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ height: height }));
+      }, 300);
     })();
     true;
   `;
+
+  const handleMessage = (event: WebViewMessageEvent) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.height) {
+        setRealHeight(data.height);
+      }
+    } catch (e) {
+      
+    }
+  };
 
   return (
     <View style={styles.section}>
@@ -205,12 +209,13 @@ export default function PrayerTimesWidget() {
         <WebView
           ref={webviewRef}
           source={{ uri: PRAYER_TIMES_URL }}
-          style={{ width: width - 32, height: WIDGET_HEIGHT, backgroundColor: colors.background ?? colors.card }}
+          style={[styles.webview, { height: realHeight }]} 
           scrollEnabled={false}
           bounces={false}
           javaScriptEnabled
           domStorageEnabled
           injectedJavaScript={injectedJs}
+          onMessage={handleMessage}
           onLoadEnd={() => {
             webviewRef.current?.injectJavaScript(injectedJs);
           }}
@@ -223,29 +228,26 @@ export default function PrayerTimesWidget() {
 const styles = StyleSheet.create({
   section: {
     marginHorizontal: 16,
-    marginTop: 16,
+    marginVertical: 12,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   title: {
     fontSize: 18,
     color: colors.primary,
     fontFamily: 'DMSerifDisplay_400Regular',
   },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
   card: {
     borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: colors.card,
+  },
+  webview: {
+    width: '100%',
     backgroundColor: colors.card,
   },
 });
