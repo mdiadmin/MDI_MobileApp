@@ -4,14 +4,17 @@ import {
   Text,
   StatusBar,
   StyleSheet,
+  Image,
+  useWindowDimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GeometricPattern from '@/components/GeometricPattern';
-import MosqueIcon from '@/components/MosqueIcon';
 import { colors } from '@/constants/theme';
 
 const Header = () => {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const logoSize = Math.max(40, Math.round(width / 4));
 
   return (
     <>
@@ -23,13 +26,14 @@ const Header = () => {
       />
 
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <GeometricPattern opacity={0.09} />
+        <GeometricPattern opacity={0.39} />
 
-        <View style={styles.logoSection}>
-          <MosqueIcon />
-          <Text style={styles.masjidName}>Masjid Darul Iman</Text>
-          <Text style={styles.subtitle}>Islamic Centre of Markham</Text>
-        </View>
+        <Image
+          style={[styles.logo, { width: logoSize, height: logoSize }]}
+          source={require('@/assets/images/MDI_logo.png')}
+        />
+        <Text style={styles.masjidName}>Masjid Darul Iman</Text>
+        <Text style={styles.subtitle}>Islamic Centre of Markham</Text>
       </View>
     </>
   );
@@ -62,6 +66,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
+
+  logo: {
+    alignSelf: 'center',
+    zIndex: 20
+  }
 });
 
 export default Header;
