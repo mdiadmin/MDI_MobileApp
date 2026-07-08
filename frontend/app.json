@@ -1,26 +1,34 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "",
     "slug": "mdimobileapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/MDI_logo2.png",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/MDI_logo2.png"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "",
-        "backgroundImage": "",
-        "monochromeImage": ""
+        "foregroundImage": "./assets/images/MDI_logo2.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "splash": {
+        "image": "./assets/images/MDI_logo2.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#208AEF"
+      }
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
+    },
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#208AEF"
     },
     "plugins": [
       "expo-router",
@@ -28,8 +36,9 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "image": "./assets/images/MDI_logo2.png",
+          "imageWidth": 180,
+          "resizeMode": "contain"
         }
       ]
     ],
