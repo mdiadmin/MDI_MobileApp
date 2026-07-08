@@ -164,26 +164,109 @@ const buildInjectedCss = () => `
   .tr img, .th img, .masjid-icon, .masjid-icon img {
     display: none !important;
   }
+
+  .tr:has(marquee) {
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .tr:has(marquee) .td,
+  .td:has(marquee) {
+    flex: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .tr:has(marquee) span {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  /* Fallback path for older WebViews without :has() support. */
+  .tr.ticker-row {
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .tr.ticker-row .td,
+  .td.ticker-cell {
+    flex: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .tr.ticker-row span {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .td marquee,
+  marquee {
+    display: block !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    margin: 0 !important;
+    padding: 10px 20px !important;
+    overflow: hidden !important;
+    color: #FF0000 !important;
+    box-sizing: border-box !important;
+}
+
+
 `;
 
 export default function PrayerTimesWidget() {
   const webviewRef = useRef<React.ComponentRef<typeof WebView> | null>(null);
   const [realHeight, setRealHeight] = useState(INITIAL_WIDGET_HEIGHT);
+  const [cacheBuster] = useState(() => Date.now());
 
   const injectedJs = `
     (function() {
-      const existing = document.getElementById('__app_injected_style__');
-      if (existing) existing.remove();
-      const style = document.createElement('style');
-      style.id = '__app_injected_style__';
-      style.innerHTML = ${JSON.stringify(buildInjectedCss())};
-      document.head.appendChild(style);
+      function injectStyle() {
+        var existing = document.getElementById('__app_injected_style__');
+        if (existing) existing.remove();
+        var style = document.createElement('style');
+        style.id = '__app_injected_style__';
+        style.innerHTML = ${JSON.stringify(buildInjectedCss())};
+        document.head.appendChild(style);
+      }
 
-      // Measure widget size and dispatch to React Native
-      setTimeout(function() {
+      function tagTickerRow() {
+        var marquees = document.querySelectorAll('marquee');
+        marquees.forEach(function(m) {
+          var cell = m.closest('.td');
+          var row = m.closest('.tr');
+          if (cell) cell.classList.add('ticker-cell');
+          if (row) row.classList.add('ticker-row');
+        });
+      }
+
+      function sendHeight() {
         var height = document.documentElement.scrollHeight || document.body.scrollHeight;
         window.ReactNativeWebView.postMessage(JSON.stringify({ height: height }));
-      }, 300);
+      }
+
+      injectStyle();
+      tagTickerRow();
+      sendHeight();
+
+      var observer = new MutationObserver(function() {
+        if (!document.getElementById('__app_injected_style__')) {
+          injectStyle();
+        }
+        tagTickerRow();
+        sendHeight();
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      setTimeout(function() {
+        observer.disconnect();
+      }, 8000);
     })();
     true;
   `;
@@ -208,12 +291,13 @@ export default function PrayerTimesWidget() {
       <View style={[styles.card, shadows.widget]}>
         <WebView
           ref={webviewRef}
-          source={{ uri: PRAYER_TIMES_URL }}
+          source={{ uri: `${PRAYER_TIMES_URL}?_=${cacheBuster}` }}
           style={[styles.webview, { height: realHeight }]} 
           scrollEnabled={false}
           bounces={false}
           javaScriptEnabled
           domStorageEnabled
+          cacheEnabled={false}
           injectedJavaScript={injectedJs}
           onMessage={handleMessage}
           onLoadEnd={() => {
