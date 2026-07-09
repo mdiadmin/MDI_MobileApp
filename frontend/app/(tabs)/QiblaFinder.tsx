@@ -10,8 +10,8 @@ import {
 } from "react-native";
 
 import * as Location from "expo-location";
-import * as Haptics from "expo-haptics";
-import { Magnetometer, Accelerometer } from "expo-sensors";
+
+import { Magnetometer, Accelerometer, Gyroscope } from "expo-sensors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Animated, {
@@ -23,16 +23,28 @@ import Animated, {
 const ASSETS = {
   compassDial: require("../../assets/images/compass-dial.png"),
   compassNeedle: require("../../assets/images/compass-needle.png"),
+  qiblaIcon: require("../../assets/images/qibla.png"),
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const COMPASS_SIZE = Math.round(SCREEN_WIDTH * 0.75);
+const QIBLA_ICON_SIZE = 30;
+const BEAM_WIDTH = 2;
 
 function normalizeAngle(angle: number) {
   return ((angle % 360) + 360) % 360;
 }
 
-const SMOOTHING_ALPHA = 0.15;
+function shortestAngleDiff(a: number, b: number) {
+  let diff = (b - a) % 360;
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  return diff;
+}
+
+const GRAVITY_ALPHA = 0.85;
+const MAG_HEADING_ALPHA = 0.85;
+const GYRO_TRUST = 0.96;
 const DEAD_ZONE_DEGREES = 0.3;
 
 const KAABA_LAT = 21.4225;
@@ -64,23 +76,26 @@ export default function QiblaFinder() {
   const [aligned, setAligned] = useState(false);
 
   const dialRotation = useSharedValue(0);
-  const hapticTriggered = useRef(false);
+
   const continuousRotationRef = useRef(0);
-  const smoothedHeadingRef = useRef<number | null>(null);
   const qiblaAngleRef = useRef<number | null>(null);
   const alignedRef = useRef(false);
 
-  // New Ref to hold the geographic true north offset
   const declinationRef = useRef<number>(0);
 
   const magnetometerData = useRef({ x: 0, y: 0, z: 0 });
   const accelerometerData = useRef({ x: 0, y: 0, z: 0 });
-  
-  const rotationMatrix = useRef<number[][]>([
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
-  ]);
+
+  const gravityRef = useRef({ x: 0, y: 0, z: 1 });
+
+  const magHeadingRef = useRef<number | null>(null);
+
+  const fusedHeadingRef = useRef<number | null>(null);
+
+  const lastGyroTimeRef = useRef<number | null>(null);
+  const gyroAvailableRef = useRef(true);
+
+  const declinationCleanupRef = useRef<null | (() => void)>(null);
 
   const setQibla = useCallback((angle: number) => {
     qiblaAngleRef.current = angle;
@@ -93,116 +108,176 @@ export default function QiblaFinder() {
 
     let difference = Math.abs(((target - currentHeading + 540) % 360) - 180);
     const isAligned = difference <= 3;
-    
+
     alignedRef.current = isAligned;
     setAligned(isAligned);
-    
-    if (isAligned && !hapticTriggered.current) {
-      hapticTriggered.current = true;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else if (!isAligned) {
-      hapticTriggered.current = false;
-    }
   }, []);
+
+  // Applies a newly-computed fused heading to state + the animated dial.
+  const applyHeading = useCallback((fusedHeading: number) => {
+    setHeading(fusedHeading);
+
+    const dialTarget = normalizeAngle(-fusedHeading);
+    const currentRotation = normalizeAngle(continuousRotationRef.current);
+    let rotationDelta = dialTarget - currentRotation;
+
+    if (rotationDelta > 180) rotationDelta -= 360;
+    if (rotationDelta < -180) rotationDelta += 360;
+
+    const unwrappedTarget = continuousRotationRef.current + rotationDelta;
+    continuousRotationRef.current = unwrappedTarget;
+
+    dialRotation.value = withTiming(unwrappedTarget, {
+      duration: 60,
+    });
+
+    checkAlignment(fusedHeading);
+  }, [checkAlignment, dialRotation]);
 
   useEffect(() => {
     let isCancelled = false;
 
     Accelerometer.setUpdateInterval(16);
     Magnetometer.setUpdateInterval(16);
+    Gyroscope.setUpdateInterval(16);
 
-    const magSub = Magnetometer.addListener((data) => {
-      magnetometerData.current = data;
-      updateHeading();
-    });
-
-    const accelSub = Accelerometer.addListener((data) => {
-      accelerometerData.current = data;
-      updateRotationMatrix(data);
-      updateHeading();
-    });
-
-    function updateRotationMatrix(accel: { x: number; y: number; z: number }) {
-      const norm = Math.sqrt(accel.x * accel.x + accel.y * accel.y + accel.z * accel.z);
-      if (norm === 0) return;
-
-      const gx = accel.x / norm;
-      const gy = accel.y / norm;
-      const gz = accel.z / norm;
-
-      const E = Math.sqrt(gx * gx + gy * gy);
+    function updateGravity(accel: { x: number; y: number; z: number }) {
       
-      if (E > 0.001) { 
-        const Ex = gx / E;
-        const Ey = gy / E;
-        
-        rotationMatrix.current = [
-          [Ex * gz, Ey * gz, -E],
-          [-Ey, Ex, 0],
-          [gx, gy, gz]
-        ];
-      } else {
-        rotationMatrix.current = [
-          [1, 0, 0],
-          [0, 1, 0],
-          [0, 0, 1]
-        ];
-      }
+      const E = Math.sqrt(accel.x * accel.x + accel.y * accel.y);
+      const dynamicAlpha = E < 0.2 ? 0.95 : GRAVITY_ALPHA;
+      
+      gravityRef.current = {
+        x: dynamicAlpha * gravityRef.current.x + (1 - dynamicAlpha) * accel.x,
+        y: dynamicAlpha * gravityRef.current.y + (1 - dynamicAlpha) * accel.y,
+        z: dynamicAlpha * gravityRef.current.z + (1 - dynamicAlpha) * accel.z,
+      };
     }
 
-    function updateHeading() {
-      if (isCancelled) return;
+    function tiltCompensatedWorldMag(
+      g: { x: number; y: number; z: number },
+      mag: { x: number; y: number; z: number }
+    ) {
+      const norm = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
+      if (norm === 0) return null;
 
-      const mag = magnetometerData.current;
-      const R = rotationMatrix.current;
+      // Normalize gravity vector
+      const gx = g.x / norm;
+      const gy = g.y / norm;
+      const gz = g.z / norm;
 
-      const worldMagX = R[0][0] * mag.x + R[0][1] * mag.y + R[0][2] * mag.z;
-      const worldMagY = R[1][0] * mag.x + R[1][1] * mag.y + R[1][2] * mag.z;
+      const E = Math.sqrt(gx * gx + gy * gy);
 
-      let rawHeading = Math.atan2(worldMagY, worldMagX) * (180 / Math.PI);
-      
-      if (Platform.OS === 'ios') {
-        rawHeading = -rawHeading;
-      }
-      
-      rawHeading += declinationRef.current;
-      
-      rawHeading = normalizeAngle(rawHeading);
-
-      if (smoothedHeadingRef.current === null) {
-        smoothedHeadingRef.current = rawHeading;
-      } else {
-        let delta = rawHeading - smoothedHeadingRef.current;
-        
-        if (delta > 180) delta -= 360;
-        if (delta < -180) delta += 360;
-
-        if (Math.abs(delta) > DEAD_ZONE_DEGREES) {
-          smoothedHeadingRef.current = normalizeAngle(
-            smoothedHeadingRef.current + delta * SMOOTHING_ALPHA
-          );
+      // If the phone is nearly flat, we need special handling
+      if (E < 0.1) {
+        // When flat, use a simpler 2D compass approach
+        // Determine orientation based on the sign of gz
+        if (gz < 0) {
+          // Phone is facing down - flip the axes
+          return { x: -mag.x, y: -mag.y };
+        } else {
+          // Phone is facing up - standard flat compass
+          return { x: mag.x, y: mag.y };
         }
       }
 
-      const smoothedHeading = smoothedHeadingRef.current;
-      setHeading(smoothedHeading);
+      const Ex = gx / E;
+      const Ey = gy / E;
+      const worldX = Ex * gz * mag.x + Ey * gz * mag.y - E * mag.z;
+      const worldY = -Ey * mag.x + Ex * mag.y;
 
-      const dialTarget = normalizeAngle(-smoothedHeading);
-      const currentRotation = normalizeAngle(continuousRotationRef.current);
-      let rotationDelta = dialTarget - currentRotation;
-      
-      if (rotationDelta > 180) rotationDelta -= 360;
-      if (rotationDelta < -180) rotationDelta += 360;
-
-      const unwrappedTarget = continuousRotationRef.current + rotationDelta;
-      continuousRotationRef.current = unwrappedTarget;
-
-      dialRotation.value = withTiming(unwrappedTarget, { 
-        duration: 100 
-      });
-
-      checkAlignment(smoothedHeading);
+      return { x: worldX, y: worldY };
     }
+
+    function updateMagHeading() {
+      const mag = magnetometerData.current;
+      const worldMag = tiltCompensatedWorldMag(gravityRef.current, mag);
+      if (worldMag == null) return;
+
+      let rawHeading = Math.atan2(worldMag.y, worldMag.x) * (180 / Math.PI);
+
+      if (Platform.OS === "ios") {
+        rawHeading = -rawHeading;
+      }
+
+      rawHeading += declinationRef.current;
+      rawHeading = normalizeAngle(rawHeading);
+
+      if (magHeadingRef.current === null) {
+        magHeadingRef.current = rawHeading;
+        if (fusedHeadingRef.current === null) {
+          fusedHeadingRef.current = rawHeading;
+          applyHeading(rawHeading);
+        }
+      } else {
+        const delta = shortestAngleDiff(magHeadingRef.current, rawHeading);
+        magHeadingRef.current = normalizeAngle(
+          magHeadingRef.current + delta * (1 - MAG_HEADING_ALPHA)
+        );
+      }
+    }
+
+    const magSub = Magnetometer.addListener((data) => {
+      if (isCancelled) return;
+      magnetometerData.current = data;
+      updateMagHeading();
+    });
+
+    const accelSub = Accelerometer.addListener((data) => {
+      if (isCancelled) return;
+      accelerometerData.current = data;
+      updateGravity(data);
+      updateMagHeading();
+    });
+
+    const gyroSub = Gyroscope.addListener((data) => {
+      if (isCancelled) return;
+
+      const now = Date.now();
+      const lastTime = lastGyroTimeRef.current;
+      lastGyroTimeRef.current = now;
+
+      if (lastTime == null || magHeadingRef.current == null) {
+        return; 
+      }
+
+      const dt = Math.min((now - lastTime) / 1000, 0.2); // clamp in case of a stall
+      const g = gravityRef.current;
+      const gNorm = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z) || 1;
+      const upX = g.x / gNorm;
+      const upY = g.y / gNorm;
+      const upZ = g.z / gNorm;
+
+      let yawRateDeg = (data.x * upX + data.y * upY + data.z * upZ) * (180 / Math.PI);
+
+      if (Platform.OS === "ios") {
+        yawRateDeg = -yawRateDeg;
+      }
+
+      const previousFused = fusedHeadingRef.current ?? magHeadingRef.current;
+      const gyroIntegrated = normalizeAngle(previousFused + yawRateDeg * dt);
+
+      const correction = shortestAngleDiff(gyroIntegrated, magHeadingRef.current);
+      let fused = normalizeAngle(gyroIntegrated + correction * (1 - GYRO_TRUST));
+
+      const changeSinceLast = Math.abs(shortestAngleDiff(previousFused, fused));
+      if (changeSinceLast < DEAD_ZONE_DEGREES) {
+        fused = previousFused;
+      }
+
+      fusedHeadingRef.current = fused;
+      applyHeading(fused);
+    });
+
+    Gyroscope.isAvailableAsync()
+      .then((available) => {
+        gyroAvailableRef.current = available;
+        if (!available) {
+          console.warn("Gyroscope unavailable, falling back to magnetometer-only heading.");
+        }
+      })
+      .catch(() => {
+        gyroAvailableRef.current = false;
+      });
 
     async function loadCachedQibla() {
       try {
@@ -223,31 +298,40 @@ export default function QiblaFinder() {
     }
 
     async function fetchDeclinationOffset() {
-      let tempSub: any = null;
+      const tempSubRef: { current: any } = { current: null };
       try {
-        tempSub = await Location.watchHeadingAsync((data) => {
+        tempSubRef.current = await Location.watchHeadingAsync((data) => {
           if (data.trueHeading !== -1) {
             let offset = data.trueHeading - data.magHeading;
             if (offset > 180) offset -= 360;
             if (offset < -180) offset += 360;
-            
+
             declinationRef.current = offset;
-            
-            if (tempSub) {
-              tempSub.remove();
-              tempSub = null;
+
+            if (tempSubRef.current) {
+              tempSubRef.current.remove();
+              tempSubRef.current = null;
             }
           }
         });
-
-        setTimeout(() => {
-          if (tempSub) {
-            tempSub.remove();
-          }
-        }, 3000);
       } catch (e) {
         console.warn("Could not fetch declination from OS");
       }
+
+      const timeoutId = setTimeout(() => {
+        if (tempSubRef.current) {
+          tempSubRef.current.remove();
+          tempSubRef.current = null;
+        }
+      }, 3000);
+
+      declinationCleanupRef.current = () => {
+        clearTimeout(timeoutId);
+        if (tempSubRef.current) {
+          tempSubRef.current.remove();
+          tempSubRef.current = null;
+        }
+      };
     }
 
     async function resolveFreshLocation() {
@@ -277,18 +361,17 @@ export default function QiblaFinder() {
 
         const { latitude, longitude } = location.coords;
         const angle = calculateQiblaBearing(latitude, longitude);
-        
+
         setQibla(angle);
         setLoading(false);
 
-        // Cache the result WITH the declination
         await AsyncStorage.setItem(
           CACHE_KEY,
-          JSON.stringify({ 
-            latitude, 
-            longitude, 
+          JSON.stringify({
+            latitude,
+            longitude,
             qiblaAngle: angle,
-            declination: declinationRef.current 
+            declination: declinationRef.current
           })
         );
 
@@ -312,8 +395,13 @@ export default function QiblaFinder() {
       isCancelled = true;
       magSub.remove();
       accelSub.remove();
+      gyroSub.remove();
+      if (declinationCleanupRef.current) {
+        declinationCleanupRef.current();
+        declinationCleanupRef.current = null;
+      }
     };
-  }, [checkAlignment, setQibla]);
+  }, [applyHeading, setQibla]);
 
   const dialStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${dialRotation.value}deg` }],
@@ -322,54 +410,83 @@ export default function QiblaFinder() {
   if (loading || qiblaAngle == null) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color="#D4A745" />
         <Text style={styles.loadingText}>Finding Qibla...</Text>
       </View>
     );
   }
 
   const qiblaDirection = normalizeAngle(qiblaAngle - heading);
-  const directionText = qiblaDirection <= 180 ? "Turn Left" : "Turn Right";
+  const directionText = qiblaDirection <= 180 ? "Turn Right" : "Turn Left";
   const degreesToTurn = qiblaDirection <= 180 ? qiblaDirection : 360 - qiblaDirection;
+
+  const halfCompass = COMPASS_SIZE / 2;
+  const beamLength = halfCompass - 10;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Qibla Finder</Text>
+      <View style={styles.titleRow}>
+        <View style={styles.titleLine} />
+        <Text style={styles.title}>QIBLA</Text>
+        <View style={styles.titleLine} />
+      </View>
 
       <View style={styles.compassContainer}>
+        {/* Rotating dial layer */}
         <Animated.View style={[styles.layer, dialStyle]}>
           <Animated.Image
             source={ASSETS.compassDial}
             style={styles.imageAsset}
             resizeMode="contain"
           />
-        </Animated.View>
 
+          {/* Golden beam from center toward qibla direction */}
+          <View
+            style={[
+              styles.beam,
+              {
+                height: beamLength,
+                transform: [
+                  { rotate: `${qiblaAngle}deg` },
+                  { translateY: -beamLength / 2 },
+                ],
+              },
+            ]}
+          />
+
+          {/* Qibla icon at the calculated bearing on the rim */}
+          <View
+            style={[
+              styles.qiblaIconWrapper,
+              {
+                transform: [
+                  { rotate: `${qiblaAngle}deg` },
+                  { translateY: -(halfCompass - QIBLA_ICON_SIZE / 2 - 4) },
+                  { rotate: `-${qiblaAngle}deg` },
+                ],
+              },
+            ]}
+          >
+            <Animated.Image
+              source={ASSETS.qiblaIcon}
+              style={styles.qiblaIcon}
+              resizeMode="contain"
+            />
+          </View>
+        </Animated.View>
+        
         <View style={styles.layer} pointerEvents="none">
           <Animated.Image
             source={ASSETS.compassNeedle}
-            style={styles.imageAsset}
+            style={styles.needleAsset}
             resizeMode="contain"
           />
         </View>
       </View>
 
-      <View style={styles.infoContainer}>
-        <Text style={[styles.status, { color: aligned ? "#4CAF50" : "#FF9800" }]}>
-          {aligned 
-            ? "✓ Facing Qibla" 
-            : `${directionText} ${degreesToTurn.toFixed(0)}°`
-          }
-        </Text>
-        
-        <Text style={styles.detailText}>
-          Qibla: {qiblaAngle.toFixed(0)}° | Heading: {heading.toFixed(0)}°
-        </Text>
-        
-        <Text style={styles.detailText}>
-          Difference: {qiblaDirection.toFixed(1)}°
-        </Text>
-      </View>
+      <Text style={[styles.title, { fontSize: 16, letterSpacing: 1, marginTop: 10 }]}>
+        {aligned ? "Aligned with Qibla" : `${directionText} ${degreesToTurn.toFixed(0)}°`}
+      </Text>
     </View>
   );
 }
@@ -377,13 +494,14 @@ export default function QiblaFinder() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F4F8",
+    backgroundColor: "#0D3B2E",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
   loading: {
     flex: 1,
+    backgroundColor: "#0D3B2E",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -391,12 +509,24 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     fontWeight: "500",
+    color: "#D4A745",
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  titleLine: {
+    height: 1,
+    width: 40,
+    backgroundColor: "#D4A745",
+    marginHorizontal: 12,
   },
   title: {
     fontSize: 26,
     fontWeight: "700",
-    marginBottom: 30,
-    color: "#333",
+    color: "#D4A745",
+    letterSpacing: 6,
   },
   compassContainer: {
     width: COMPASS_SIZE,
@@ -404,7 +534,7 @@ const styles = StyleSheet.create({
     position: "relative",
     justifyContent: "center",
     alignItems: "center",
-    marginVertical: 30,
+    marginVertical: 20,
   },
   layer: {
     width: COMPASS_SIZE,
@@ -420,24 +550,27 @@ const styles = StyleSheet.create({
     height: "100%",
     position: "absolute",
   },
-  infoContainer: {
+  beam: {
+    position: "absolute",
+    width: BEAM_WIDTH,
+    backgroundColor: "#D4A745",
+    opacity: 0.7,
+    borderRadius: 1,
+  },
+  qiblaIconWrapper: {
+    position: "absolute",
+    width: QIBLA_ICON_SIZE,
+    height: QIBLA_ICON_SIZE,
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderRadius: 10,
-    minWidth: 250,
   },
-  status: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 10,
-    textAlign: "center",
+  qiblaIcon: {
+    width: QIBLA_ICON_SIZE,
+    height: QIBLA_ICON_SIZE,
   },
-  detailText: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 5,
+  needleAsset: {
+    width: "55%",
+    height: "55%",
+    position: "absolute",
   },
 });
