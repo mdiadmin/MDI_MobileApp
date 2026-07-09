@@ -5,15 +5,16 @@ import {
   FlatList,
   RefreshControl,
   Image,
-  Linking,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   StatusBar,
+  Modal,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { WebView } from 'react-native-webview';
 import GeometricPattern from '@/components/GeometricPattern';
 import LoadingState from '@/components/LoadingState';
 import { colors, shadows } from '@/constants/theme';
@@ -54,19 +55,11 @@ function decodeHtmlEntities(text: string): string {
   };
 
   let decoded = text;
-
   Object.entries(entities).forEach(([entity, char]) => {
     decoded = decoded.split(entity).join(char);
   });
-
-  decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
-    String.fromCodePoint(parseInt(hex, 16))
-  );
-
-  decoded = decoded.replace(/&#(\d+);/g, (_, dec) =>
-    String.fromCodePoint(parseInt(dec, 10))
-  );
-
+  decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+  decoded = decoded.replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)));
   return decoded;
 }
 
@@ -94,30 +87,21 @@ function getPrimaryCategory(post: WPPost): string {
 }
 
 function getImageUrl(post: WPPost): string | undefined {
-  return post.featured_image_src_large
-    ? post.featured_image_src_large[0]
-    : undefined;
+  return post.featured_image_src_large ? post.featured_image_src_large[0] : undefined;
 }
 
 function CategoryPill({ category }: { category: string }) {
-  const style = CATEGORY_COLORS[category] ?? {
-    bg: colors.secondary,
-    text: colors.primary,
-  };
-
+  const style = CATEGORY_COLORS[category] ?? { bg: colors.secondary, text: colors.primary };
   return (
     <View style={[styles.categoryPill, { backgroundColor: style.bg }]}>
       <MaterialCommunityIcons name="tag-outline" size={9} color={style.text} />
-      <Text style={[styles.categoryPillText, { color: style.text }]}>
-        {category}
-      </Text>
+      <Text style={[styles.categoryPillText, { color: style.text }]}>{category}</Text>
     </View>
   );
 }
 
 function ImageGradientOverlay() {
   const gradientId = useId().replace(/:/g, '');
-
   return (
     <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
@@ -132,30 +116,16 @@ function ImageGradientOverlay() {
   );
 }
 
-function FeaturedCard({
-  post,
-  onPress,
-}: {
-  post: WPPost;
-  onPress: () => void;
-}) {
+function FeaturedCard({ post, onPress }: { post: WPPost; onPress: () => void }) {
   const title = decodeHtmlEntities(post.title.rendered);
   const category = getPrimaryCategory(post);
   const imageUrl = getImageUrl(post);
 
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.9}
-      style={[styles.featuredCard, shadows.card]}
-    >
+    <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={[styles.featuredCard, shadows.card]}>
       <View style={styles.featuredImageWrap}>
         {imageUrl ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.featuredImage}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: imageUrl }} style={styles.featuredImage} resizeMode="cover" />
         ) : null}
         <ImageGradientOverlay />
         <View style={styles.featuredCategory}>
@@ -164,11 +134,7 @@ function FeaturedCard({
         <View style={styles.featuredContent}>
           <Text style={styles.featuredTitle}>{title}</Text>
           <View style={styles.featuredDateRow}>
-            <MaterialCommunityIcons
-              name="clock-outline"
-              size={11}
-              color="rgba(255,255,255,0.6)"
-            />
+            <MaterialCommunityIcons name="clock-outline" size={11} color="rgba(255,255,255,0.6)" />
             <Text style={styles.featuredDate}>{formatDate(post.date)}</Text>
           </View>
         </View>
@@ -177,57 +143,33 @@ function FeaturedCard({
   );
 }
 
-function AnnouncementRow({
-  post,
-  onPress,
-}: {
-  post: WPPost;
-  onPress: () => void;
-}) {
+function AnnouncementRow({ post, onPress }: { post: WPPost; onPress: () => void }) {
   const title = decodeHtmlEntities(post.title.rendered);
   const excerpt = stripHtml(post.excerpt.rendered);
   const category = getPrimaryCategory(post);
   const imageUrl = getImageUrl(post);
 
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={[styles.rowCard, shadows.action]}
-    >
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={[styles.rowCard, shadows.action]}>
       <View style={styles.thumbnail}>
         {imageUrl ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.thumbnailImage}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} resizeMode="cover" />
         ) : (
           <View style={styles.thumbnailPlaceholder}>
             <Text style={styles.thumbnailEmoji}>🕌</Text>
           </View>
         )}
       </View>
-
       <View style={styles.rowContent}>
         <View style={styles.rowMeta}>
           <CategoryPill category={category} />
           <Text style={styles.rowDate}>{formatDate(post.date)}</Text>
         </View>
-        <Text style={styles.rowTitle} numberOfLines={2}>
-          {title}
-        </Text>
-        <Text style={styles.rowExcerpt} numberOfLines={1}>
-          {excerpt}
-        </Text>
+        <Text style={styles.rowTitle} numberOfLines={2}>{title}</Text>
+        <Text style={styles.rowExcerpt} numberOfLines={1}>{excerpt}</Text>
       </View>
-
       <View style={styles.rowChevron}>
-        <MaterialCommunityIcons
-          name="chevron-right"
-          size={16}
-          color={colors.muted}
-        />
+        <MaterialCommunityIcons name="chevron-right" size={16} color={colors.muted} />
       </View>
     </TouchableOpacity>
   );
@@ -235,24 +177,14 @@ function AnnouncementRow({
 
 function AnnouncementsHeader() {
   const insets = useSafeAreaInsets();
-
   return (
     <>
-      <StatusBar
-        animated
-        translucent
-        backgroundColor="transparent"
-        barStyle="light-content"
-      />
+      <StatusBar animated translucent backgroundColor="transparent" barStyle="light-content" />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <GeometricPattern opacity={0.08} />
         <View style={styles.headerContent}>
           <View style={styles.headerSubtitleRow}>
-            <MaterialCommunityIcons
-              name="bell-outline"
-              size={18}
-              color="rgba(255,255,255,0.7)"
-            />
+            <MaterialCommunityIcons name="bell-outline" size={18} color="rgba(255,255,255,0.7)" />
             <Text style={styles.headerSubtitle}>Latest from the Masjid</Text>
           </View>
           <Text style={styles.headerTitle}>Announcements</Text>
@@ -268,6 +200,7 @@ export default function Announcements() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState('All');
+  const [selectedPost, setSelectedPost] = useState<WPPost | null>(null);
 
   const fetchPosts = useCallback(async () => {
     try {
@@ -277,11 +210,14 @@ export default function Announcements() {
         throw new Error(`Request failed with status ${response.status}`);
       }
       const data: WPPost[] = await response.json();
-      setPosts(data);
+      
+      const sortedData = data.sort((a, b) => {
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+      
+      setPosts(sortedData);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to load announcements'
-      );
+      setError(err instanceof Error ? err.message : 'Failed to load announcements');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -306,40 +242,21 @@ export default function Announcements() {
   }, [posts]);
 
   const filteredPosts = useMemo(() => {
-    if (activeFilter === 'All') {
-      return posts;
-    }
-    return posts.filter((post) =>
-      post.category_info?.some((category) => category.name === activeFilter)
-    );
+    if (activeFilter === 'All') return posts;
+    return posts.filter((post) => post.category_info?.some((category) => category.name === activeFilter));
   }, [posts, activeFilter]);
 
-  const featuredPost =
-    activeFilter === 'All' && filteredPosts.length > 0
-      ? filteredPosts[0]
-      : null;
+  const featuredPost = activeFilter === 'All' && filteredPosts.length > 0 ? filteredPosts[0] : null;
+  const listPosts = activeFilter === 'All' ? filteredPosts.slice(1) : filteredPosts;
 
-  const listPosts =
-    activeFilter === 'All' ? filteredPosts.slice(1) : filteredPosts;
-
-  const openPost = (link: string) => {
-    Linking.openURL(link);
-  };
-
-  if (loading) {
-    return <LoadingState message="Loading announcements..." />;
-  }
+  if (loading) return <LoadingState message="Loading announcements..." />;
 
   if (error) {
     return (
       <View style={styles.screen}>
         <AnnouncementsHeader />
         <View style={styles.errorContainer}>
-          <MaterialCommunityIcons
-            name="alert-circle-outline"
-            size={40}
-            color={colors.accent}
-          />
+          <MaterialCommunityIcons name="alert-circle-outline" size={40} color={colors.accent} />
           <Text style={styles.errorText}>Something went wrong: {error}</Text>
           <TouchableOpacity onPress={fetchPosts} style={styles.retryButton}>
             <Text style={styles.retryText}>Tap to retry</Text>
@@ -358,20 +275,10 @@ export default function Announcements() {
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         ListHeaderComponent={
           <>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterRow}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
               {categories.map((category) => {
                 const active = category === activeFilter;
                 return (
@@ -379,19 +286,9 @@ export default function Announcements() {
                     key={category}
                     onPress={() => setActiveFilter(category)}
                     activeOpacity={0.85}
-                    style={[
-                      styles.filterPill,
-                      active ? styles.filterPillActive : styles.filterPillInactive,
-                    ]}
+                    style={[styles.filterPill, active ? styles.filterPillActive : styles.filterPillInactive]}
                   >
-                    <Text
-                      style={[
-                        styles.filterPillText,
-                        active
-                          ? styles.filterPillTextActive
-                          : styles.filterPillTextInactive,
-                      ]}
-                    >
+                    <Text style={[styles.filterPillText, active ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
                       {category}
                     </Text>
                   </TouchableOpacity>
@@ -400,259 +297,308 @@ export default function Announcements() {
             </ScrollView>
 
             {featuredPost ? (
-              <FeaturedCard
-                post={featuredPost}
-                onPress={() => openPost(featuredPost.link)}
-              />
+              <FeaturedCard post={featuredPost} onPress={() => setSelectedPost(featuredPost)} />
             ) : null}
           </>
         }
         renderItem={({ item }) => (
-          <AnnouncementRow
-            post={item}
-            onPress={() => openPost(item.link)}
-          />
+          <AnnouncementRow post={item} onPress={() => setSelectedPost(item)} />
         )}
         ListEmptyComponent={
           filteredPosts.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>📭</Text>
-              <Text style={styles.emptyText}>
-                No announcements in this category
-              </Text>
+              <Text style={styles.emptyText}>No announcements in this category</Text>
             </View>
           ) : null
         }
       />
+
+      <Modal
+        visible={!!selectedPost}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedPost(null)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setSelectedPost(null)} style={styles.modalCloseBtn}>
+              <MaterialCommunityIcons name="close" size={24} color={colors.foreground} />
+            </TouchableOpacity>
+            
+            <Text style={styles.modalTitle} numberOfLines={1}>
+              {selectedPost ? decodeHtmlEntities(selectedPost.title.rendered) : ''}
+            </Text>
+            
+            <View style={{ width: 40 }} />
+          </View>
+          
+          {selectedPost && (
+            <WebView 
+              source={{ uri: selectedPost.link }} 
+              style={styles.webview} 
+              startInLoadingState={true}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
+  screen: { 
+    flex: 1, 
+    backgroundColor: colors.background 
   },
-  header: {
-    position: 'relative',
+  header: { 
+    position: 'relative', 
+    overflow: 'hidden', 
+    backgroundColor: colors.primary, 
+    paddingBottom: 24, 
+    paddingHorizontal: 20 
+  },
+  headerContent: { 
+    zIndex: 10 
+  },
+  headerSubtitleRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 4 
+  },
+  headerSubtitle: { 
+    color: 'rgba(255,255,255,0.7)', 
+    fontSize: 11, letterSpacing: 1.2, 
+    textTransform: 'uppercase', 
+    fontFamily: 'PlusJakartaSans_600SemiBold' 
+  },
+  headerTitle: { 
+    color: '#fff', 
+    fontSize: 26, 
+    lineHeight: 32, 
+    fontFamily: 'DMSerifDisplay_400Regular' 
+  },
+  filterRow: { 
+    paddingVertical: 12, 
+    gap: 8 
+  },
+  filterPill: { 
+    borderRadius: 999, 
+    paddingHorizontal: 16, 
+    paddingVertical: 6 
+  },
+  filterPillActive: { 
+    backgroundColor: colors.primary, 
+    ...shadows.widget 
+  },
+  filterPillInactive: { 
+    backgroundColor: colors.card, 
+    shadowColor: colors.primary, 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.08, 
+    shadowRadius: 4, 
+    elevation: 2 
+  },
+  filterPillText: { 
+    fontSize: 12, 
+    fontFamily: 'PlusJakartaSans_600SemiBold' 
+  },
+  filterPillTextActive: { 
+    color: '#fff' 
+  },
+  filterPillTextInactive: { 
+    color: colors.primaryLight 
+  },
+  listContent: { 
+    paddingHorizontal: 16, 
+    paddingBottom: 120 
+  },
+  featuredCard: { 
+    borderRadius: 16, 
     overflow: 'hidden',
-    backgroundColor: colors.primary,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
+    marginBottom: 12 
   },
-  headerContent: {
-    zIndex: 10,
+  featuredImageWrap: { 
+    height: 200, 
+    backgroundColor: colors.secondary, 
+    position: 'relative' 
   },
-  headerSubtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+  featuredImage: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    right: 0, 
+    bottom: 0, 
+    width: '100%', 
+    height: '100%' 
   },
-  headerSubtitle: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  featuredCategory: { 
+    position: 'absolute', 
+    top: 12, 
+    left: 12, 
+    zIndex: 2 
   },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 26,
-    lineHeight: 32,
-    fontFamily: 'DMSerifDisplay_400Regular',
+  featuredContent: { 
+    position: 'absolute', 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    padding: 16, 
+    zIndex: 2 
   },
-  filterRow: {
-    paddingVertical: 12,
-    gap: 8,
+  featuredTitle: { 
+    color: '#fff', 
+    fontSize: 16, 
+    lineHeight: 22, 
+    fontFamily: 'DMSerifDisplay_400Regular' 
   },
-  filterPill: {
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+  featuredDateRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    marginTop: 8 
   },
-  filterPillActive: {
-    backgroundColor: colors.primary,
-    ...shadows.widget,
+  featuredDate: { 
+    color: 'rgba(255,255,255,0.6)', 
+    fontSize: 11, 
+    fontFamily: 'PlusJakartaSans_400Regular' 
   },
-  filterPillInactive: {
-    backgroundColor: colors.card,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+  rowCard: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: colors.card, 
+    borderRadius: 16, 
+    padding: 14, 
+    gap: 12, 
+    marginBottom: 12 
   },
-  filterPillText: {
-    fontSize: 12,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  thumbnail: { 
+    width: 72, 
+    height: 72, 
+    borderRadius: 12, 
+    overflow: 'hidden', 
+    backgroundColor: colors.secondary 
   },
-  filterPillTextActive: {
-    color: '#fff',
+  thumbnailImage: { 
+    width: '100%', 
+    height: '100%' 
   },
-  filterPillTextInactive: {
-    color: colors.primaryLight,
+  thumbnailPlaceholder: { 
+    flex: 1, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    backgroundColor: colors.secondary 
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 120,
-  },
-  featuredCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  featuredImageWrap: {
-    height: 200,
-    backgroundColor: colors.secondary,
-    position: 'relative',
-  },
-  featuredImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-  },
-  featuredCategory: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    zIndex: 2,
-  },
-  featuredContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    zIndex: 2,
-  },
-  featuredTitle: {
-    color: '#fff',
-    fontSize: 16,
-    lineHeight: 22,
-    fontFamily: 'DMSerifDisplay_400Regular',
-  },
-  featuredDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 8,
-  },
-  featuredDate: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
-  rowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-    marginBottom: 12,
-  },
-  thumbnail: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: colors.secondary,
-  },
-  thumbnailImage: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbnailPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.secondary,
-  },
-  thumbnailEmoji: {
-    fontSize: 26,
+  thumbnailEmoji: { 
+    fontSize: 26 
   },
   rowContent: {
-    flex: 1,
-    minWidth: 0,
+    flex: 1, 
+    minWidth: 0 
   },
-  rowMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-    flexWrap: 'wrap',
+  rowMeta: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 6, 
+    flexWrap: 'wrap' 
   },
-  rowDate: {
+  rowDate: { 
     color: colors.muted,
-    fontSize: 10,
-    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 10, 
+    fontFamily: 'PlusJakartaSans_400Regular' 
   },
-  rowTitle: {
-    color: colors.foreground,
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  rowTitle: { 
+    color: colors.foreground, 
+    fontSize: 13, 
+    lineHeight: 18, 
+    fontFamily: 'PlusJakartaSans_600SemiBold' 
   },
-  rowExcerpt: {
-    color: colors.muted,
-    fontSize: 11,
-    marginTop: 4,
-    fontFamily: 'PlusJakartaSans_400Regular',
+  rowExcerpt: { 
+    color: colors.muted, 
+    fontSize: 11, 
+    marginTop: 4, 
+    fontFamily: 'PlusJakartaSans_400Regular' 
   },
-  rowChevron: {
-    justifyContent: 'center',
+  rowChevron: { 
+    justifyContent: 'center' 
   },
-  categoryPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+  categoryPill: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    borderRadius: 999, 
+    paddingHorizontal: 10, 
+    paddingVertical: 3 
   },
-  categoryPillText: {
-    fontSize: 10,
-    letterSpacing: 0.4,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  categoryPillText: { 
+    fontSize: 10, 
+    letterSpacing: 0.4, 
+    fontFamily: 'PlusJakartaSans_600SemiBold' 
   },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 64,
+  emptyContainer: { 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: 64 
   },
-  emptyEmoji: {
-    fontSize: 40,
-    marginBottom: 12,
+  emptyEmoji: { 
+    fontSize: 40, 
+    marginBottom: 12 
   },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 14,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  emptyText: { 
+    color: colors.muted, 
+    fontSize: 14, 
+    fontFamily: 'PlusJakartaSans_600SemiBold' 
   },
-  errorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
+  errorContainer: { 
+    flex: 1, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    padding: 24, 
+    gap: 12 
   },
-  errorText: {
-    color: colors.primaryLight,
-    fontSize: 14,
-    textAlign: 'center',
-    fontFamily: 'PlusJakartaSans_400Regular',
+  errorText: { 
+    color: colors.primaryLight, 
+    fontSize: 14, 
+    textAlign: 'center', 
+    fontFamily: 'PlusJakartaSans_400Regular' 
   },
-  retryButton: {
-    marginTop: 4,
+  retryButton: { 
+    marginTop: 4
   },
-  retryText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  retryText: { 
+    color: colors.primary, 
+    fontSize: 14, 
+    fontFamily: 'PlusJakartaSans_600SemiBold' 
   },
+  
+  modalContainer: { 
+    flex: 1, 
+    backgroundColor: colors.card 
+  },
+  modalHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)'
+  },
+  modalCloseBtn: { 
+    padding: 4, 
+    width: 40 
+  },
+  modalTitle: { 
+    flex: 1, 
+    textAlign: 'center', 
+    fontSize: 15, 
+    fontFamily: 'PlusJakartaSans_600SemiBold', 
+    color: colors.foreground 
+  },
+  webview: { 
+    flex: 1, 
+    backgroundColor: colors.background 
+  }
 });
