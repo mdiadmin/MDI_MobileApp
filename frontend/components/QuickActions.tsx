@@ -19,12 +19,10 @@ type QuickAction = {
 };
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { icon: 'bullhorn-outline', label: 'Announcements', color: colors.primary, bg: colors.secondary },
-  { icon: 'calendar-outline', label: 'Events', color: colors.accent, bg: colors.accentBg },
-  { icon: 'television', label: 'Livestream', color: colors.primary, bg: colors.secondary },
+  { icon: 'bullhorn-outline', label: 'Announcements', color: colors.primary, bg: colors.secondary, route: '/Announcements' },
+  // { icon: 'calendar-outline', label: 'Events', color: colors.accent, bg: colors.accentBg },
   { icon: 'book-open-variant', label: 'Quran', color: colors.accent, bg: colors.accentBg, route: '/quran' },
-  { icon: 'map-marker-outline', label: 'Location', color: colors.primary, bg: colors.secondary },
-  { icon: 'account-group-outline', label: 'Volunteer', color: colors.accent, bg: colors.accentBg },
+  { icon: 'map-marker-outline', label: 'Qibla', color: colors.primary, bg: colors.secondary, route: '/QiblaFinder' },
 ];
 
 const HORIZONTAL_PADDING = 16;
