@@ -19,7 +19,36 @@ import GeometricPattern from '@/components/GeometricPattern';
 import LoadingState from '@/components/LoadingState';
 import { colors, shadows } from '@/constants/theme';
 
-const WP_POSTS_URL = 'https://daruliman.org/wp-json/wp/v2/posts';
+const WP_POSTS_URL = 'https://daruliman.org/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10';
+
+const HIDE_HEADER_FOOTER_SCRIPT = `
+  const style = document.createElement('style');
+  style.innerHTML = \`
+    header, 
+    footer, 
+    .site-header, 
+    .site-footer,
+    #masthead,
+    #colophon,
+    .footer-widgets,
+    .entry-related-inner-content,
+    .related-posts {
+      display: none !important;
+    }
+    
+    body > .site-container:first-of-type,
+    body > .site-container:last-of-type {
+       display: none !important;
+    }
+
+    body {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+  \`;
+  document.head.appendChild(style);
+  true; 
+`;
 
 interface WPPost {
   id: number;
@@ -31,6 +60,7 @@ interface WPPost {
   author_info?: { display_name: string; author_link?: string };
   featured_image_src_large?: [string, number, number, boolean] | false;
   category_info?: { term_id: number; name: string }[];
+  _embedded?: { 'wp:featuredmedia'?: Array<{ source_url: string }> };
 }
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
@@ -87,7 +117,7 @@ function getPrimaryCategory(post: WPPost): string {
 }
 
 function getImageUrl(post: WPPost): string | undefined {
-  return post.featured_image_src_large ? post.featured_image_src_large[0] : undefined;
+  return post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? undefined; undefined;
 }
 
 function CategoryPill({ category }: { category: string }) {
@@ -116,6 +146,7 @@ function ImageGradientOverlay() {
   );
 }
 
+// FeaturedCard Component
 function FeaturedCard({ post, onPress }: { post: WPPost; onPress: () => void }) {
   const title = decodeHtmlEntities(post.title.rendered);
   const category = getPrimaryCategory(post);
@@ -143,6 +174,7 @@ function FeaturedCard({ post, onPress }: { post: WPPost; onPress: () => void }) 
   );
 }
 
+// AnnouncementRow Component
 function AnnouncementRow({ post, onPress }: { post: WPPost; onPress: () => void }) {
   const title = decodeHtmlEntities(post.title.rendered);
   const excerpt = stripHtml(post.excerpt.rendered);
@@ -175,6 +207,7 @@ function AnnouncementRow({ post, onPress }: { post: WPPost; onPress: () => void 
   );
 }
 
+// AnnouncementsHeader Component
 function AnnouncementsHeader() {
   const insets = useSafeAreaInsets();
   return (
@@ -194,6 +227,7 @@ function AnnouncementsHeader() {
   );
 }
 
+// Main Component
 export default function Announcements() {
   const [posts, setPosts] = useState<WPPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -338,6 +372,8 @@ export default function Announcements() {
               source={{ uri: selectedPost.link }} 
               style={styles.webview} 
               startInLoadingState={true}
+              injectedJavaScript={HIDE_HEADER_FOOTER_SCRIPT}
+              javaScriptEnabled={true}
             />
           )}
         </SafeAreaView>
@@ -572,7 +608,6 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     fontFamily: 'PlusJakartaSans_600SemiBold' 
   },
-  
   modalContainer: { 
     flex: 1, 
     backgroundColor: colors.card 
