@@ -44,7 +44,7 @@ function shortestAngleDiff(a: number, b: number) {
 
 const GRAVITY_ALPHA = 0.85;
 const MAG_HEADING_ALPHA = 0.85;
-const GYRO_TRUST = 0.96;
+const GYRO_TRUST = 0.75;
 const DEAD_ZONE_DEGREES = 0.3;
 
 const KAABA_LAT = 21.4225;
@@ -97,6 +97,8 @@ export default function QiblaFinder() {
 
   const declinationCleanupRef = useRef<null | (() => void)>(null);
 
+  const lastLogRef = useRef(0)
+
   const setQibla = useCallback((angle: number) => {
     qiblaAngleRef.current = angle;
     setQiblaAngle(angle);
@@ -145,7 +147,7 @@ export default function QiblaFinder() {
       
       const E = Math.sqrt(accel.x * accel.x + accel.y * accel.y);
       const dynamicAlpha = E < 0.2 ? 0.95 : GRAVITY_ALPHA;
-      
+       
       gravityRef.current = {
         x: dynamicAlpha * gravityRef.current.x + (1 - dynamicAlpha) * accel.x,
         y: dynamicAlpha * gravityRef.current.y + (1 - dynamicAlpha) * accel.y,
@@ -157,46 +159,50 @@ export default function QiblaFinder() {
       g: { x: number; y: number; z: number },
       mag: { x: number; y: number; z: number }
     ) {
-      const norm = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
-      if (norm === 0) return null;
+      // Up vector = normalized gravity
+      const g_mag = Math.sqrt(g.x*g.x + g.y*g.y + g.z*g.z);
+      if (g_mag < 1e-6) return null;
+      const ux = g.x / g_mag;
+      const uy = g.y / g_mag;
+      const uz = g.z / g_mag;
 
-      // Normalize gravity vector
-      const gx = g.x / norm;
-      const gy = g.y / norm;
-      const gz = g.z / norm;
+      // east = gravity x mag
+      let ex = uy*mag.z - uz*mag.y;
+      let ey = uz*mag.x - ux*mag.z; 
+      let ez = ux*mag.y - uy*mag.x;
 
-      const E = Math.sqrt(gx * gx + gy * gy);
+      const east_mag = Math.sqrt(ex*ex + ey*ey + ez*ez);
+      if (east_mag < 1e-6) return null; // field parallel to up -> heading undefined
+      ex /= east_mag;
+      ey /= east_mag;
+      ez /= east_mag;
 
-      // If the phone is nearly flat, we need special handling
-      if (E < 0.1) {
-        // When flat, use a simpler 2D compass approach
-        // Determine orientation based on the sign of gz
-        if (gz < 0) {
-          // Phone is facing down - flip the axes
-          return { x: -mag.x, y: -mag.y };
-        } else {
-          // Phone is facing up - standard flat compass
-          return { x: mag.x, y: mag.y };
-        }
-      }
+      // north = east x gravity
+      const ny = ez*ux - ex*uz;
 
-      const Ex = gx / E;
-      const Ey = gy / E;
-      const worldX = Ex * gz * mag.x + Ey * gz * mag.y - E * mag.z;
-      const worldY = -Ey * mag.x + Ex * mag.y;
-
-      return { x: worldX, y: worldY };
+      return { x: ny, y: ey };
     }
 
     function updateMagHeading() {
       const mag = magnetometerData.current;
+
+      const norm = Math.sqrt(mag.x*mag.x + mag.y*mag.y + mag.z*mag.z);
+
       const worldMag = tiltCompensatedWorldMag(gravityRef.current, mag);
       if (worldMag == null) return;
 
       let rawHeading = Math.atan2(worldMag.y, worldMag.x) * (180 / Math.PI);
 
-      if (Platform.OS === "ios") {
-        rawHeading = -rawHeading;
+      const now = Date.now();
+      if (now - lastLogRef.current > 1000) {
+        lastLogRef.current = now;
+        console.log(
+          "raw:", rawHeading.toFixed(1),
+          "decl:", declinationRef.current.toFixed(1),
+          "final:", magHeadingRef.current?.toFixed(1)
+        );
+        if(norm > 65 || norm < 25)
+          console.warn("Possible interference, current mag magnitude:", norm);
       }
 
       rawHeading += declinationRef.current;
