@@ -22,7 +22,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { icon: 'bullhorn-outline', label: 'Announcements', color: colors.primary, bg: colors.secondary, route: '/Announcements' },
   // { icon: 'calendar-outline', label: 'Events', color: colors.accent, bg: colors.accentBg },
   { icon: 'book-open-variant', label: 'Quran', color: colors.accent, bg: colors.accentBg, route: '/quran' },
-  { icon: 'map-marker-outline', label: 'Qibla', color: colors.primary, bg: colors.secondary, route: '/QiblaFinder' },
+  { icon: 'map-marker-outline', label: 'Compass', color: colors.primary, bg: colors.secondary, route: '/QiblaFinder' },
 ];
 
 const HORIZONTAL_PADDING = 16;
