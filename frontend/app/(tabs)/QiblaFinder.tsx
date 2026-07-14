@@ -44,7 +44,7 @@ function shortestAngleDiff(a: number, b: number) {
 
 const GRAVITY_ALPHA = 0.85;
 const MAG_HEADING_ALPHA = 0.85;
-const GYRO_TRUST = 0.75;
+const GYRO_TRUST = 0.80;
 const DEAD_ZONE_DEGREES = 0.3;
 
 const KAABA_LAT = 21.4225;
@@ -74,6 +74,10 @@ export default function QiblaFinder() {
   const [qiblaAngle, setQiblaAngle] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [aligned, setAligned] = useState(false);
+  const [interference, setInterference] = useState(false);
+
+  const interferenceRef = useRef(false);
+  const interferenceClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dialRotation = useSharedValue(0);
 
@@ -193,6 +197,28 @@ export default function QiblaFinder() {
 
       let rawHeading = Math.atan2(worldMag.y, worldMag.x) * (180 / Math.PI);
 
+      // A healthy Earth magnetic field reads ~25-65 µT. Values outside that band
+      // mean a nearby magnet/metal/electronics is distorting the reading, so the
+      // heading can't be trusted — surface it as a banner in the UI.
+      const hasInterference = norm > 65 || norm < 25;
+      if (hasInterference) {
+        if (interferenceClearTimerRef.current) {
+          clearTimeout(interferenceClearTimerRef.current);
+          interferenceClearTimerRef.current = null;
+        }
+        if (!interferenceRef.current) {
+          interferenceRef.current = true;
+          setInterference(true);
+        }
+      } else if (interferenceRef.current && !interferenceClearTimerRef.current) {
+        // Debounce clearing so the banner doesn't flicker on brief dips.
+        interferenceClearTimerRef.current = setTimeout(() => {
+          interferenceRef.current = false;
+          setInterference(false);
+          interferenceClearTimerRef.current = null;
+        }, 1500);
+      }
+
       const now = Date.now();
       if (now - lastLogRef.current > 1000) {
         lastLogRef.current = now;
@@ -201,7 +227,7 @@ export default function QiblaFinder() {
           "decl:", declinationRef.current.toFixed(1),
           "final:", magHeadingRef.current?.toFixed(1)
         );
-        if(norm > 65 || norm < 25)
+        if (hasInterference)
           console.warn("Possible interference, current mag magnitude:", norm);
       }
 
@@ -228,8 +254,17 @@ export default function QiblaFinder() {
       updateMagHeading();
     });
 
-    const accelSub = Accelerometer.addListener((data) => {
+    const accelSub = Accelerometer.addListener((raw) => {
       if (isCancelled) return;
+      // expo-sensors reports the accelerometer with the opposite sign on Android
+      // compared to iOS. The tilt-compensation math below is tuned to the iOS
+      // convention, so normalize Android here — otherwise the "up" vector is
+      // inverted, which mirrors the heading when flat and makes it diverge as
+      // the phone is tilted.
+      const data =
+        Platform.OS === "android"
+          ? { x: -raw.x, y: -raw.y, z: -raw.z }
+          : raw;
       accelerometerData.current = data;
       updateGravity(data);
       updateMagHeading();
@@ -255,9 +290,10 @@ export default function QiblaFinder() {
 
       let yawRateDeg = (data.x * upX + data.y * upY + data.z * upZ) * (180 / Math.PI);
 
-      if (Platform.OS === "ios") {
-        yawRateDeg = -yawRateDeg;
-      }
+      // The gravity/up vector is normalized to the iOS convention above, so the
+      // yaw projection is flipped on every platform (this is behavior-preserving
+      // for the gyro on both iOS and Android).
+      yawRateDeg = -yawRateDeg;
 
       const previousFused = fusedHeadingRef.current ?? magHeadingRef.current;
       const gyroIntegrated = normalizeAngle(previousFused + yawRateDeg * dt);
@@ -406,6 +442,10 @@ export default function QiblaFinder() {
         declinationCleanupRef.current();
         declinationCleanupRef.current = null;
       }
+      if (interferenceClearTimerRef.current) {
+        clearTimeout(interferenceClearTimerRef.current);
+        interferenceClearTimerRef.current = null;
+      }
     };
   }, [applyHeading, setQibla]);
 
@@ -431,6 +471,15 @@ export default function QiblaFinder() {
 
   return (
     <View style={styles.container}>
+      {interference && (
+        <View style={styles.interferenceBanner}>
+          <Text style={styles.interferenceText}>
+            Magnetic interference detected. Move away from metal or electronics
+            for an accurate reading.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.titleRow}>
         <View style={styles.titleLine} />
         <Text style={styles.title}>QIBLA</Text>
@@ -516,6 +565,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#D4A745",
+  },
+  interferenceBanner: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(212, 71, 71, 0.95)",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    zIndex: 10,
+  },
+  interferenceText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
   titleRow: {
     flexDirection: "row",
