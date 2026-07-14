@@ -21,7 +21,8 @@
         "image": "./assets/images/MDI_logo2.png",
         "resizeMode": "contain",
         "backgroundColor": "#208AEF"
-      }
+      },
+      "package": "com.mdiadminsorganization.mdimobileapp"
     },
     "web": {
       "output": "static",
@@ -53,6 +54,12 @@
         "projectId": "474d174d-8726-45c7-b9b4-e2e635761834"
       }
     },
-    "owner": "mdiadmins-organization"
+    "owner": "mdiadmins-organization",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/474d174d-8726-45c7-b9b4-e2e635761834"
+    }
   }
 }
