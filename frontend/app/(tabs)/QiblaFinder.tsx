@@ -18,6 +18,8 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withRepeat,
+  Easing,
 } from "react-native-reanimated";
 
 const ASSETS = {
@@ -88,6 +90,8 @@ export default function QiblaFinder() {
   const flatRef = useRef(false);
 
   const dialRotation = useSharedValue(0);
+  const pulseScale = useSharedValue(1);
+  const pulseOpacity = useSharedValue(0.3);
 
   const continuousRotationRef = useRef(0);
   const qiblaAngleRef = useRef<number | null>(null);
@@ -456,6 +460,31 @@ export default function QiblaFinder() {
     transform: [{ rotate: `${dialRotation.value}deg` }],
   }));
 
+  // Pulsing ring animation
+  useEffect(() => {
+    pulseScale.value = withRepeat(
+      withTiming(1.15, {
+        duration: 2000,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1,
+      true
+    );
+    pulseOpacity.value = withRepeat(
+      withTiming(0.1, {
+        duration: 2000,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1,
+      true
+    );
+  }, []);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+    opacity: pulseOpacity.value,
+  }));
+
   if (loading || qiblaAngle == null) {
     return (
       <View style={styles.loading}>
@@ -490,6 +519,9 @@ export default function QiblaFinder() {
       </View>
 
       <View style={styles.compassContainer}>
+        {/* Pulsing ring */}
+        <Animated.View style={[styles.pulsingRing, pulseStyle]} />
+
         {/* Rotating dial layer */}
         <Animated.View style={[styles.layer, dialStyle]}>
           <Animated.Image
@@ -545,7 +577,7 @@ export default function QiblaFinder() {
           <View style={styles.flatOverlay} pointerEvents="none">
             <Text style={styles.flatOverlayTitle}>Lay Phone Flat</Text>
             <Text style={styles.flatOverlaySubtitle}>
-              Place your phone flat on the ground for an accurate reading.
+              Place your phone on a flat surface for an accurate reading.
             </Text>
           </View>
         )}
@@ -570,6 +602,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
+  star: {
+    position: "absolute",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 50,
+  },
   loading: {
     flex: 1,
     backgroundColor: "#0D3B2E",
@@ -581,6 +618,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#D4A745",
+  },
+  pulsingRing: {
+    position: "absolute",
+    width: COMPASS_SIZE,
+    height: COMPASS_SIZE,
+    borderRadius: COMPASS_SIZE / 2,
+    borderWidth: 2,
+    borderColor: "#D4A745",
+    zIndex: 0,
   },
   flatOverlay: {
     position: "absolute",
