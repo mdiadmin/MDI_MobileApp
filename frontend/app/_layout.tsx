@@ -27,6 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { APP_NAME, TERMS_AND_CONDITIONS, PRIVACY_POLICY } from "@/constants/legal";
 import { colors } from "@/constants/theme";
+import PrayerNotifications from "@/services/PrayerNotifications";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -326,5 +327,10 @@ export default function RootLayout() {
     );
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <>
+      <PrayerNotifications />
+      <Stack screenOptions={{ headerShown: false }} />
+    </>
+  );
 }
