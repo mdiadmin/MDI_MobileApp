@@ -9,13 +9,16 @@ import {
   ScrollView,
   StatusBar,
   useWindowDimensions,
-  Linking
+  Linking,
+  Switch,
+  Alert
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import GeometricPattern from '@/components/GeometricPattern';
 import { colors } from '@/constants/theme';
 import { TERMS_AND_CONDITIONS, PRIVACY_POLICY, APP_VERSION } from '@/constants/legal';
+import { usePrayerNotifications } from '@/services/PrayerNotifications';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -23,6 +26,17 @@ export default function SettingsScreen() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const { width } = useWindowDimensions();
   const logoSize = Math.max(40, Math.round(width / 9));
+  const { enabled: notificationsEnabled, busy: notificationsBusy, toggle: toggleNotifications } = usePrayerNotifications();
+
+  const handleToggleNotifications = async (value: boolean) => {
+    const result = await toggleNotifications(value);
+    if (value && !result) {
+      Alert.alert(
+        'Notifications Disabled',
+        'Prayer time reminders need notification permission. Enable it for this app in your device Settings.'
+      );
+    }
+  };
 
   // Handler to open the website securely
   const handleOpenWebsite = async () => {
@@ -57,6 +71,27 @@ export default function SettingsScreen() {
 
       {/* Settings Content */}
       <View style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+
+          <View style={styles.row}>
+            <View style={styles.iconWrap}>
+              <MaterialCommunityIcons name="bell-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowTitle}>Prayer Time Reminders</Text>
+              <Text style={styles.rowDescription}>Get notified at each prayer time</Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleToggleNotifications}
+              disabled={notificationsBusy}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
           
