@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "",
+    "name": "MDI Mobile App",
     "slug": "mdimobileapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,8 @@
     "userInterfaceStyle": "automatic",
     "icon": "./assets/images/MDI_logo2.png",
     "ios": {
-      "icon": "./assets/images/MDI_logo2.png"
+      "icon": "./assets/images/MDI_logo2.png",
+      "bundleIdentifier": "com.mdi-admin.mdimobileapp"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +21,8 @@
         "image": "./assets/images/MDI_logo2.png",
         "resizeMode": "contain",
         "backgroundColor": "#208AEF"
-      }
+      },
+      "package": "com.mdiadminsorganization.mdimobileapp"
     },
     "web": {
       "output": "static",
@@ -52,6 +54,12 @@
         "projectId": "474d174d-8726-45c7-b9b4-e2e635761834"
       }
     },
-    "owner": "mdiadmins-organization"
+    "owner": "mdiadmins-organization",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/474d174d-8726-45c7-b9b4-e2e635761834"
+    }
   }
 }

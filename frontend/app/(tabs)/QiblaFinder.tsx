@@ -44,7 +44,7 @@ function shortestAngleDiff(a: number, b: number) {
 
 const GRAVITY_ALPHA = 0.85;
 const MAG_HEADING_ALPHA = 0.85;
-const GYRO_TRUST = 0.96;
+const GYRO_TRUST = 0.80;
 const DEAD_ZONE_DEGREES = 0.3;
 
 const KAABA_LAT = 21.4225;
@@ -74,6 +74,10 @@ export default function QiblaFinder() {
   const [qiblaAngle, setQiblaAngle] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [aligned, setAligned] = useState(false);
+  const [interference, setInterference] = useState(false);
+
+  const interferenceRef = useRef(false);
+  const interferenceClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dialRotation = useSharedValue(0);
 
@@ -96,6 +100,8 @@ export default function QiblaFinder() {
   const gyroAvailableRef = useRef(true);
 
   const declinationCleanupRef = useRef<null | (() => void)>(null);
+
+  const lastLogRef = useRef(0)
 
   const setQibla = useCallback((angle: number) => {
     qiblaAngleRef.current = angle;
@@ -145,7 +151,7 @@ export default function QiblaFinder() {
       
       const E = Math.sqrt(accel.x * accel.x + accel.y * accel.y);
       const dynamicAlpha = E < 0.2 ? 0.95 : GRAVITY_ALPHA;
-      
+       
       gravityRef.current = {
         x: dynamicAlpha * gravityRef.current.x + (1 - dynamicAlpha) * accel.x,
         y: dynamicAlpha * gravityRef.current.y + (1 - dynamicAlpha) * accel.y,
@@ -157,46 +163,72 @@ export default function QiblaFinder() {
       g: { x: number; y: number; z: number },
       mag: { x: number; y: number; z: number }
     ) {
-      const norm = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
-      if (norm === 0) return null;
+      // Up vector = normalized gravity
+      const g_mag = Math.sqrt(g.x*g.x + g.y*g.y + g.z*g.z);
+      if (g_mag < 1e-6) return null;
+      const ux = g.x / g_mag;
+      const uy = g.y / g_mag;
+      const uz = g.z / g_mag;
 
-      // Normalize gravity vector
-      const gx = g.x / norm;
-      const gy = g.y / norm;
-      const gz = g.z / norm;
+      // east = gravity x mag
+      let ex = uy*mag.z - uz*mag.y;
+      let ey = uz*mag.x - ux*mag.z; 
+      let ez = ux*mag.y - uy*mag.x;
 
-      const E = Math.sqrt(gx * gx + gy * gy);
+      const east_mag = Math.sqrt(ex*ex + ey*ey + ez*ez);
+      if (east_mag < 1e-6) return null; // field parallel to up -> heading undefined
+      ex /= east_mag;
+      ey /= east_mag;
+      ez /= east_mag;
 
-      // If the phone is nearly flat, we need special handling
-      if (E < 0.1) {
-        // When flat, use a simpler 2D compass approach
-        // Determine orientation based on the sign of gz
-        if (gz < 0) {
-          // Phone is facing down - flip the axes
-          return { x: -mag.x, y: -mag.y };
-        } else {
-          // Phone is facing up - standard flat compass
-          return { x: mag.x, y: mag.y };
-        }
-      }
+      // north = east x gravity
+      const ny = ez*ux - ex*uz;
 
-      const Ex = gx / E;
-      const Ey = gy / E;
-      const worldX = Ex * gz * mag.x + Ey * gz * mag.y - E * mag.z;
-      const worldY = -Ey * mag.x + Ex * mag.y;
-
-      return { x: worldX, y: worldY };
+      return { x: ny, y: ey };
     }
 
     function updateMagHeading() {
       const mag = magnetometerData.current;
+
+      const norm = Math.sqrt(mag.x*mag.x + mag.y*mag.y + mag.z*mag.z);
+
       const worldMag = tiltCompensatedWorldMag(gravityRef.current, mag);
       if (worldMag == null) return;
 
       let rawHeading = Math.atan2(worldMag.y, worldMag.x) * (180 / Math.PI);
 
-      if (Platform.OS === "ios") {
-        rawHeading = -rawHeading;
+      // A healthy Earth magnetic field reads ~25-65 µT. Values outside that band
+      // mean a nearby magnet/metal/electronics is distorting the reading, so the
+      // heading can't be trusted — surface it as a banner in the UI.
+      const hasInterference = norm > 65 || norm < 25;
+      if (hasInterference) {
+        if (interferenceClearTimerRef.current) {
+          clearTimeout(interferenceClearTimerRef.current);
+          interferenceClearTimerRef.current = null;
+        }
+        if (!interferenceRef.current) {
+          interferenceRef.current = true;
+          setInterference(true);
+        }
+      } else if (interferenceRef.current && !interferenceClearTimerRef.current) {
+        // Debounce clearing so the banner doesn't flicker on brief dips.
+        interferenceClearTimerRef.current = setTimeout(() => {
+          interferenceRef.current = false;
+          setInterference(false);
+          interferenceClearTimerRef.current = null;
+        }, 1500);
+      }
+
+      const now = Date.now();
+      if (now - lastLogRef.current > 1000) {
+        lastLogRef.current = now;
+        console.log(
+          "raw:", rawHeading.toFixed(1),
+          "decl:", declinationRef.current.toFixed(1),
+          "final:", magHeadingRef.current?.toFixed(1)
+        );
+        if (hasInterference)
+          console.warn("Possible interference, current mag magnitude:", norm);
       }
 
       rawHeading += declinationRef.current;
@@ -222,8 +254,17 @@ export default function QiblaFinder() {
       updateMagHeading();
     });
 
-    const accelSub = Accelerometer.addListener((data) => {
+    const accelSub = Accelerometer.addListener((raw) => {
       if (isCancelled) return;
+      // expo-sensors reports the accelerometer with the opposite sign on Android
+      // compared to iOS. The tilt-compensation math below is tuned to the iOS
+      // convention, so normalize Android here — otherwise the "up" vector is
+      // inverted, which mirrors the heading when flat and makes it diverge as
+      // the phone is tilted.
+      const data =
+        Platform.OS === "android"
+          ? { x: -raw.x, y: -raw.y, z: -raw.z }
+          : raw;
       accelerometerData.current = data;
       updateGravity(data);
       updateMagHeading();
@@ -249,9 +290,10 @@ export default function QiblaFinder() {
 
       let yawRateDeg = (data.x * upX + data.y * upY + data.z * upZ) * (180 / Math.PI);
 
-      if (Platform.OS === "ios") {
-        yawRateDeg = -yawRateDeg;
-      }
+      // The gravity/up vector is normalized to the iOS convention above, so the
+      // yaw projection is flipped on every platform (this is behavior-preserving
+      // for the gyro on both iOS and Android).
+      yawRateDeg = -yawRateDeg;
 
       const previousFused = fusedHeadingRef.current ?? magHeadingRef.current;
       const gyroIntegrated = normalizeAngle(previousFused + yawRateDeg * dt);
@@ -400,6 +442,10 @@ export default function QiblaFinder() {
         declinationCleanupRef.current();
         declinationCleanupRef.current = null;
       }
+      if (interferenceClearTimerRef.current) {
+        clearTimeout(interferenceClearTimerRef.current);
+        interferenceClearTimerRef.current = null;
+      }
     };
   }, [applyHeading, setQibla]);
 
@@ -425,6 +471,15 @@ export default function QiblaFinder() {
 
   return (
     <View style={styles.container}>
+      {interference && (
+        <View style={styles.interferenceBanner}>
+          <Text style={styles.interferenceText}>
+            Magnetic interference detected. Move away from metal or electronics
+            for an accurate reading.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.titleRow}>
         <View style={styles.titleLine} />
         <Text style={styles.title}>QIBLA</Text>
@@ -510,6 +565,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#D4A745",
+  },
+  interferenceBanner: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(212, 71, 71, 0.95)",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    zIndex: 10,
+  },
+  interferenceText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
   titleRow: {
     flexDirection: "row",
