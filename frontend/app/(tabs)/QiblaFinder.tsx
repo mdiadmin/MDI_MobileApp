@@ -47,6 +47,12 @@ const MAG_HEADING_ALPHA = 0.85;
 const GYRO_TRUST = 0.80;
 const DEAD_ZONE_DEGREES = 0.3;
 
+// The phone must lie flat for a trustworthy heading. Tilt is measured as the
+// angle between gravity and the screen-up axis (0° = perfectly flat face-up).
+// Hysteresis (enter/exit) keeps the "lay flat" prompt from flickering.
+const FLAT_ENTER_TILT = 12;
+const FLAT_EXIT_TILT = 20;
+
 const KAABA_LAT = 21.4225;
 const KAABA_LNG = 39.8262;
 
@@ -75,9 +81,11 @@ export default function QiblaFinder() {
   const [loading, setLoading] = useState(true);
   const [aligned, setAligned] = useState(false);
   const [interference, setInterference] = useState(false);
+  const [isFlat, setIsFlat] = useState(false);
 
   const interferenceRef = useRef(false);
   const interferenceClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flatRef = useRef(false);
 
   const dialRotation = useSharedValue(0);
 
@@ -90,7 +98,7 @@ export default function QiblaFinder() {
   const magnetometerData = useRef({ x: 0, y: 0, z: 0 });
   const accelerometerData = useRef({ x: 0, y: 0, z: 0 });
 
-  const gravityRef = useRef({ x: 0, y: 0, z: 1 });
+  const gravityRef = useRef({ x: 0, y: 0, z: -1 });
 
   const magHeadingRef = useRef<number | null>(null);
 
@@ -159,32 +167,26 @@ export default function QiblaFinder() {
       };
     }
 
-    function tiltCompensatedWorldMag(
-      g: { x: number; y: number; z: number },
-      mag: { x: number; y: number; z: number }
-    ) {
-      // Up vector = normalized gravity
-      const g_mag = Math.sqrt(g.x*g.x + g.y*g.y + g.z*g.z);
-      if (g_mag < 1e-6) return null;
-      const ux = g.x / g_mag;
-      const uy = g.y / g_mag;
-      const uz = g.z / g_mag;
+    // The phone is required to lie flat, so gravity ≈ (0,0,±1) and tilt
+    // compensation is unnecessary. Gravity is now only used to decide whether
+    // the phone is flat enough for the heading to be trusted.
+    function updateFlatness() {
+      const g = gravityRef.current;
+      const gNorm = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z) || 1;
+      // expo-sensors reports gz ≈ -1 when the phone lies flat face-up, so tilt
+      // is the angle between gravity and the -z axis: 0° = flat face-up,
+      // 90° = upright, 180° = face-down.
+      const cos = Math.min(Math.max(-g.z / gNorm, -1), 1);
+      const tiltDeg = Math.acos(cos) * (180 / Math.PI);
 
-      // east = gravity x mag
-      let ex = uy*mag.z - uz*mag.y;
-      let ey = uz*mag.x - ux*mag.z; 
-      let ez = ux*mag.y - uy*mag.x;
+      const nextFlat = flatRef.current
+        ? tiltDeg <= FLAT_EXIT_TILT
+        : tiltDeg <= FLAT_ENTER_TILT;
 
-      const east_mag = Math.sqrt(ex*ex + ey*ey + ez*ez);
-      if (east_mag < 1e-6) return null; // field parallel to up -> heading undefined
-      ex /= east_mag;
-      ey /= east_mag;
-      ez /= east_mag;
-
-      // north = east x gravity
-      const ny = ez*ux - ex*uz;
-
-      return { x: ny, y: ey };
+      if (nextFlat !== flatRef.current) {
+        flatRef.current = nextFlat;
+        setIsFlat(nextFlat);
+      }
     }
 
     function updateMagHeading() {
@@ -192,10 +194,10 @@ export default function QiblaFinder() {
 
       const norm = Math.sqrt(mag.x*mag.x + mag.y*mag.y + mag.z*mag.z);
 
-      const worldMag = tiltCompensatedWorldMag(gravityRef.current, mag);
-      if (worldMag == null) return;
-
-      let rawHeading = Math.atan2(worldMag.y, worldMag.x) * (180 / Math.PI);
+      // Phone is flat (face-up, gz ≈ -1), so the heading is simply the
+      // magnetometer's horizontal (X/Y) projection — no tilt compensation
+      // needed. The -x matches the up-vector pointing along -z.
+      let rawHeading = Math.atan2(-mag.x, mag.y) * (180 / Math.PI);
 
       // A healthy Earth magnetic field reads ~25-65 µT. Values outside that band
       // mean a nearby magnet/metal/electronics is distorting the reading, so the
@@ -222,14 +224,12 @@ export default function QiblaFinder() {
       const now = Date.now();
       if (now - lastLogRef.current > 1000) {
         lastLogRef.current = now;
-        console.log(
-          "raw:", rawHeading.toFixed(1),
-          "decl:", declinationRef.current.toFixed(1),
-          "final:", magHeadingRef.current?.toFixed(1)
-        );
-        if (hasInterference)
-          console.warn("Possible interference, current mag magnitude:", norm);
+        // Logs here
       }
+
+      // Freeze the heading while the phone isn't flat — the reading can't be
+      // trusted and the UI shows a "lay flat" prompt instead.
+      if (!flatRef.current) return;
 
       rawHeading += declinationRef.current;
       rawHeading = normalizeAngle(rawHeading);
@@ -257,16 +257,16 @@ export default function QiblaFinder() {
     const accelSub = Accelerometer.addListener((raw) => {
       if (isCancelled) return;
       // expo-sensors reports the accelerometer with the opposite sign on Android
-      // compared to iOS. The tilt-compensation math below is tuned to the iOS
-      // convention, so normalize Android here — otherwise the "up" vector is
-      // inverted, which mirrors the heading when flat and makes it diverge as
-      // the phone is tilted.
+      // compared to iOS. Normalize Android to the iOS convention so the gravity
+      // vector (used for flat detection and the gyro's up-axis) is consistent
+      // across platforms.
       const data =
         Platform.OS === "android"
           ? { x: -raw.x, y: -raw.y, z: -raw.z }
           : raw;
       accelerometerData.current = data;
       updateGravity(data);
+      updateFlatness();
       updateMagHeading();
     });
 
@@ -278,8 +278,11 @@ export default function QiblaFinder() {
       lastGyroTimeRef.current = now;
 
       if (lastTime == null || magHeadingRef.current == null) {
-        return; 
+        return;
       }
+
+      // Freeze the heading while the phone isn't flat.
+      if (!flatRef.current) return;
 
       const dt = Math.min((now - lastTime) / 1000, 0.2); // clamp in case of a stall
       const g = gravityRef.current;
@@ -537,10 +540,23 @@ export default function QiblaFinder() {
             resizeMode="contain"
           />
         </View>
+
+        {!isFlat && (
+          <View style={styles.flatOverlay} pointerEvents="none">
+            <Text style={styles.flatOverlayTitle}>Lay Phone Flat</Text>
+            <Text style={styles.flatOverlaySubtitle}>
+              Place your phone flat on the ground for an accurate reading.
+            </Text>
+          </View>
+        )}
       </View>
 
       <Text style={[styles.title, { fontSize: 16, letterSpacing: 1, marginTop: 10 }]}>
-        {aligned ? "Aligned with Qibla" : `${directionText} ${degreesToTurn.toFixed(0)}°`}
+        {!isFlat
+          ? "Lay phone flat"
+          : aligned
+          ? "Aligned with Qibla"
+          : `${directionText} ${degreesToTurn.toFixed(0)}°`}
       </Text>
     </View>
   );
@@ -565,6 +581,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#D4A745",
+  },
+  flatOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: COMPASS_SIZE / 2,
+    backgroundColor: "rgba(13, 59, 46, 0.88)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    zIndex: 5,
+  },
+  flatOverlayTitle: {
+    color: "#D4A745",
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: 1,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  flatOverlaySubtitle: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "500",
+    textAlign: "center",
+    opacity: 0.9,
   },
   interferenceBanner: {
     position: "absolute",
