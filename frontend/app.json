@@ -16,6 +16,7 @@
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/MDI_logo2.png"
       },
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"],
       "predictiveBackGestureEnabled": false,
       "splash": {
         "image": "./assets/images/MDI_logo2.png",
@@ -37,17 +38,26 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#000000",
           "image": "./assets/images/MDI_logo2.png",
           "imageWidth": 180,
           "resizeMode": "contain"
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon-small.png",
+          "color": "#0C9544"
+        }
+      ],
       [
         "onesignal-expo-plugin",
         {
-          "mode": "development"
+          "mode": "development",
+          "smallIcons": ["./assets/images/notification-icon-small.png"],
+          "largeIcons": ["./assets/images/notification-icon-large.png"],
+          "smallIconAccentColor": "#0C9544"
         }
       ]
     ],

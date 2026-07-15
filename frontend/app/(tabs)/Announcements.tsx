@@ -19,7 +19,7 @@ import GeometricPattern from '@/components/GeometricPattern';
 import LoadingState from '@/components/LoadingState';
 import { colors, shadows } from '@/constants/theme';
 
-const WP_POSTS_URL = 'https://daruliman.org/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10';
+const WP_POSTS_URL = 'https://daruliman.org/mystaging02/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10';
 
 const HIDE_HEADER_FOOTER_SCRIPT = `
   const style = document.createElement('style');

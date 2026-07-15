@@ -164,7 +164,7 @@ export async function ensureNotificationPermission() {
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: 'Prayer Times',
       importance: Notifications.AndroidImportance.HIGH,
-      sound: 'default',
+      
     });
   }
 
