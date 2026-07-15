@@ -43,7 +43,13 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -53,7 +59,8 @@
       "router": {},
       "eas": {
         "projectId": "474d174d-8726-45c7-b9b4-e2e635761834"
-      }
+      },
+      "oneSignalAppId": "1848012c-7b3b-4974-a183-76afa8f84bb1"
     },
     "owner": "mdiadmins-organization",
     "runtimeVersion": {

@@ -28,6 +28,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { APP_NAME, TERMS_AND_CONDITIONS, PRIVACY_POLICY } from "@/constants/legal";
 import { colors } from "@/constants/theme";
 import PrayerNotifications from "@/services/PrayerNotifications";
+import { initializeOneSignal } from "@/services/OneSignal";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -298,6 +299,10 @@ export default function RootLayout() {
   useEffect(() => {
     checkAcceptance();
   }, [checkAcceptance]);
+
+  useEffect(() => {
+    initializeOneSignal();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded && termsAccepted !== null) {
