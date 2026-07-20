@@ -1,286 +1,63 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
-import { colors, shadows } from '@/constants/theme';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { colors } from '@/constants/theme';
+import {
+  Prayer,
+  combineDateTime,
+  formatTime,
+  getCachedPrayerTimes,
+  getPrayerTimes,
+} from '@/services/prayerTimes';
 
-const PRAYER_TIMES_URL = 'https://portal.ad-din.ca/public/mediumdisplay/542';
-const INITIAL_WIDGET_HEIGHT = 320; // Fallback height while loading
+// Order (and inclusion) of rows shown in the widget — a superset of the five
+// prayers the notification scheduler cares about, matching what a masjid
+// display board typically shows.
+const DISPLAY_ORDER = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha', 'Jumah'];
 
-const buildInjectedCss = () => `
-  * {
-    box-sizing: border-box;
-  }
-
-  html, body {
-    background-color: transparent !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-    margin: 0;
-    padding: 0;
-    color: ${colors.foreground} !important;
-    overflow: hidden !important;
-  }
-
-  body {
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  .head-part,
-  .content {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .datetime, .head-part {
-    display: none !important;
-  }
-
-  .table {
-    width: 100% !important;
-    background-color: ${colors.card} !important;
-    border-radius: 16px !important;
-    overflow: hidden !important;
-    border: 1px solid rgba(27, 94, 56, 0.08) !important;
-    box-shadow: 0 16px 40px rgba(27, 94, 56, 0.08) !important;
-  }
-
-  .tr {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding: 14px 16px !important;
-    gap: 12px !important;
-    border-bottom: 1px solid rgba(27, 94, 56, 0.08) !important;
-    background-color: ${colors.card} !important;
-  }
-
-  .tr:last-child {
-    border-bottom: none !important;
-  }
-
-  .tr:not(.trfirst) {
-    background-color: rgba(232, 242, 236, 0.4) !important;
-    color: #1A2E1E !important;
-    font-size: 15px !important;
-    font-weight: 600 !important;
-  }
-
-  .tr:not(.trfirst):nth-of-type(even) {
-    background-color: #FFFFFF !important;
-  }
-
-  .tr.trfirst {
-    background-color: rgba(27, 94, 56, 0.04) !important;
-    padding: 12px 16px !important;
-  }
-
-  .tr.trfirst .th,
-  .tr.trfirst .thfirst {
-    color: #9AB5A4 !important;
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-  }
-
-  .tr.trfirst .thfirst {
-    flex: 1 1 45% !important;
-    text-align: left !important;
-  }
-
-  .tr.trfirst .th {
-    flex: 0 0 24% !important;
-    text-align: right !important;
-  }
-
-  .tr:not(.trfirst) .tdfirst {
-    flex: 1 1 45% !important;
-    text-align: left !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 4px !important;
-    padding-right: 4px !important;
-    color: #1A2E1E !important;
-  }
-
-  .tr:not(.trfirst) .td,
-  .tr:not(.trfirst) .tdlast {
-    flex: 0 0 24% !important;
-    text-align: right !important;
-  }
-
-  .tr:not(.trfirst) .td {
-    color: #4A7A5E !important;
-  }
-
-  .tr:not(.trfirst) .tdlast {
-    font-weight: 700 !important;
-    color: #1B5E38 !important;
-  }
-
-  .tr:not(.trfirst) .smal,
-  .tr:not(.trfirst) .tdfirst span,
-  .tr:not(.trfirst) .tdfirst .smal {
-    color: #9AB5A4 !important;
-    font-size: 12px !important;
-    font-weight: 500 !important;
-    line-height: 1.3 !important;
-  }
-
-  .tr:not(.trfirst) .tdfirst p {
-    margin: 0 !important;
-    font-size: 15px !important;
-    font-weight: 700 !important;
-    color: ${colors.foreground} !important;
-  }
-
-  .table .tr.highlight,
-  .tr.highlight:not(.trfirst) {
-    background-color: #1B5E38 !important;
-  }
-
-  .tr.highlight .tdfirst p {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-  }
-  
-  .tr.highlight .td p {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-  }
-    
-  .tr.highlight .tdlast p {
-    color: #C9933A !important;
-    font-weight: 700 !important;
-  }
-
-  .smal:not(.tdfirst):not(.td):not(.tdlast) {
-    display: none !important;
-  }
-
-  .footer, .footer *, .footer img,
-  .tr img, .th img, .masjid-icon, .masjid-icon img {
-    display: none !important;
-  }
-
-  .tr:has(marquee) {
-    display: block !important;
-    width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr:has(marquee) .td,
-  .td:has(marquee) {
-    flex: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr:has(marquee) span {
-    display: block !important;
-    width: 100% !important;
-  }
-
-  /* Fallback path for older WebViews without :has() support. */
-  .tr.ticker-row {
-    display: block !important;
-    width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr.ticker-row .td,
-  .td.ticker-cell {
-    flex: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr.ticker-row span {
-    display: block !important;
-    width: 100% !important;
-  }
-
-  .td marquee,
-  marquee {
-    display: block !important;
-    width: 100% !important;
-    min-width: 100% !important;
-    margin: 0 !important;
-    padding: 10px 20px !important;
-    overflow: hidden !important;
-    color: #FF0000 !important;
-    box-sizing: border-box !important;
+function sortForDisplay(prayers: Prayer[]): Prayer[] {
+  return prayers
+    .filter((p) => DISPLAY_ORDER.includes(p.prayerName))
+    .sort((a, b) => DISPLAY_ORDER.indexOf(a.prayerName) - DISPLAY_ORDER.indexOf(b.prayerName));
 }
 
-
-`;
+function getNextPrayerName(prayers: Prayer[], now: Date): string | null {
+  for (const p of prayers) {
+    const time = p.prayerAdhan ?? p.prayerBegins;
+    if (!time) continue;
+    if (combineDateTime(now, time).getTime() > now.getTime()) {
+      return p.prayerName;
+    }
+  }
+  return null;
+}
 
 export default function PrayerTimesWidget() {
-  const webviewRef = useRef<React.ComponentRef<typeof WebView> | null>(null);
-  const [realHeight, setRealHeight] = useState(INITIAL_WIDGET_HEIGHT);
-  const [cacheBuster] = useState(() => Date.now());
+  const [prayers, setPrayers] = useState<Prayer[] | null>(null);
+  const [error, setError] = useState(false);
 
-  const injectedJs = `
-    (function() {
-      function injectStyle() {
-        var existing = document.getElementById('__app_injected_style__');
-        if (existing) existing.remove();
-        var style = document.createElement('style');
-        style.id = '__app_injected_style__';
-        style.innerHTML = ${JSON.stringify(buildInjectedCss())};
-        document.head.appendChild(style);
-      }
+  const load = useCallback(async () => {
+    const today = new Date();
 
-      function tagTickerRow() {
-        var marquees = document.querySelectorAll('marquee');
-        marquees.forEach(function(m) {
-          var cell = m.closest('.td');
-          var row = m.closest('.tr');
-          if (cell) cell.classList.add('ticker-cell');
-          if (row) row.classList.add('ticker-row');
-        });
-      }
+    // Paint instantly from whatever's cached (no network), then refresh.
+    const cached = await getCachedPrayerTimes(today);
+    if (cached) setPrayers(cached);
 
-      function sendHeight() {
-        var height = document.documentElement.scrollHeight || document.body.scrollHeight;
-        window.ReactNativeWebView.postMessage(JSON.stringify({ height: height }));
-      }
-
-      injectStyle();
-      tagTickerRow();
-      sendHeight();
-
-      var observer = new MutationObserver(function() {
-        if (!document.getElementById('__app_injected_style__')) {
-          injectStyle();
-        }
-        tagTickerRow();
-        sendHeight();
-      });
-
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      setTimeout(function() {
-        observer.disconnect();
-      }, 8000);
-    })();
-    true;
-  `;
-
-  const handleMessage = (event: WebViewMessageEvent) => {
     try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.height) {
-        setRealHeight(data.height);
-      }
-    } catch (e) {
-      
+      const fresh = await getPrayerTimes(today);
+      setPrayers(fresh);
+      setError(false);
+    } catch {
+      if (!cached) setError(true);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const rows = useMemo(() => (prayers ? sortForDisplay(prayers) : []), [prayers]);
+  const nextPrayer = useMemo(() => (prayers ? getNextPrayerName(rows, new Date()) : null), [prayers, rows]);
 
   return (
     <View style={styles.section}>
@@ -288,22 +65,65 @@ export default function PrayerTimesWidget() {
         <Text style={styles.title}>Prayer Times</Text>
       </View>
 
-      <View style={[styles.card, shadows.widget]}>
-        <WebView
-          ref={webviewRef}
-          source={{ uri: `${PRAYER_TIMES_URL}?_=${cacheBuster}` }}
-          style={[styles.webview, { height: realHeight }]} 
-          scrollEnabled={false}
-          bounces={false}
-          javaScriptEnabled
-          domStorageEnabled
-          cacheEnabled={false}
-          injectedJavaScript={injectedJs}
-          onMessage={handleMessage}
-          onLoadEnd={() => {
-            webviewRef.current?.injectJavaScript(injectedJs);
-          }}
-        />
+      <View style={[styles.card, styles.cardShadow]}>
+        {prayers == null && !error && (
+          <View style={styles.statusRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+
+        {error && (
+          <View style={styles.statusRow}>
+            <MaterialCommunityIcons name="wifi-off" size={20} color={colors.muted} />
+            <Text style={styles.statusText}>Couldn't load prayer times</Text>
+          </View>
+        )}
+
+        {rows.length > 0 && (
+          <View style={[styles.row, styles.labelRow]}>
+            <Text style={[styles.labelText, styles.colName]}>Prayer</Text>
+            <Text style={[styles.labelText, styles.colTime]}>Adhan</Text>
+            <Text style={[styles.labelText, styles.colTime]}>Iqamah</Text>
+          </View>
+        )}
+
+        {rows.map((prayer, index) => {
+          const isNext = prayer.prayerName === nextPrayer;
+          const isLast = index === rows.length - 1;
+          // Mirrors the original CSS's `.tr:not(.trfirst):nth-of-type(even)`
+          // rule: nth-of-type counts the header row too, so the first data
+          // row (2nd <tr> overall) is the "even" one and gets the white
+          // background; the tinted background is the default for odd rows.
+          const isTinted = index % 2 === 1;
+          return (
+            <View
+              key={prayer.prayerName}
+              style={[
+                styles.row,
+                isTinted ? styles.rowTinted : styles.rowWhite,
+                isLast && styles.rowLast,
+                isNext && styles.rowHighlight,
+              ]}
+            >
+              <Text style={[styles.rowName, styles.colName, isNext && styles.rowTextHighlight]}>
+                {prayer.prayerName}
+              </Text>
+              <Text
+                style={[
+                  styles.rowTime,
+                  styles.colTime,
+                  isNext && styles.rowTextHighlight,
+                  isNext && styles.rowTimeHighlightWeight,
+                ]}
+              >
+                {prayer.prayerAdhan ? formatTime(prayer.prayerAdhan) : ''}
+              </Text>
+              <Text style={[styles.rowIqamah, styles.colTime, isNext && styles.rowIqamahHighlight]}>
+                {prayer.prayerIqamah ? formatTime(prayer.prayerIqamah) : ''}
+              </Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -329,9 +149,117 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: 'rgba(27, 94, 56, 0.08)',
   },
-  webview: {
-    width: '100%',
+  // Replicates the injected CSS's `box-shadow: 0 16px 40px rgba(27,94,56,0.08)`
+  // exactly, rather than reusing the app's generic `shadows.widget`.
+  cardShadow: {
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.08,
+    shadowRadius: 40,
+    elevation: 8,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 24,
+  },
+  statusText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontFamily: 'PlusJakartaSans_400Regular',
+  },
+  // Mirrors `.thfirst`/`.tdfirst { flex: 1 1 45% }`.
+  colName: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '45%',
+    textAlign: 'left',
+  },
+  // Mirrors `.th`/`.td`/`.tdlast { flex: 0 0 24% }`.
+  colTime: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: '24%',
+    textAlign: 'right',
+  },
+  // Mirrors the base `.tr` rule shared by the header and data rows.
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(27, 94, 56, 0.08)',
     backgroundColor: colors.card,
+  },
+  // `.tr.trfirst` overrides the base row's padding and background.
+  labelRow: {
+    paddingVertical: 12,
+    backgroundColor: 'rgba(27, 94, 56, 0.04)',
+  },
+  labelText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  // `.tr:not(.trfirst)` default background (tint).
+  rowTinted: {
+    backgroundColor: 'rgba(232, 242, 236, 0.4)',
+  },
+  // `.tr:not(.trfirst):nth-of-type(even)` override (white).
+  rowWhite: {
+    backgroundColor: '#FFFFFF',
+  },
+  // `.tr:last-child { border-bottom: none }`.
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  // `.tr.highlight` background.
+  rowHighlight: {
+    backgroundColor: colors.primary,
+  },
+  // `.tdfirst p`.
+  rowName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.foreground,
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  // `.td` (inherits the row's 15px/600 base; no explicit override).
+  rowTime: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primaryLight,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+  },
+  // `.tr.highlight .td p` bumps the Adhan column to bold, matching the name
+  // and Iqamah columns' weight once a row is highlighted.
+  rowTimeHighlightWeight: {
+    fontWeight: '700',
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  // `.tdlast`.
+  rowIqamah: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  // `.tr.highlight .tdlast p`.
+  rowIqamahHighlight: {
+    color: colors.accent,
+  },
+  // `.tr.highlight .tdfirst p` / `.tr.highlight .td p` shared color.
+  rowTextHighlight: {
+    color: '#FFFFFF',
   },
 });

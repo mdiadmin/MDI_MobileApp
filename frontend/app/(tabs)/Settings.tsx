@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import GeometricPattern from '@/components/GeometricPattern';
 import { colors } from '@/constants/theme';
-import { TERMS_AND_CONDITIONS, PRIVACY_POLICY, APP_VERSION } from '@/constants/legal';
+import { TERMS_AND_CONDITIONS, PRIVACY_POLICY, APP_VERSION, LAST_UPDATED } from '@/constants/legal';
 import { usePrayerNotifications } from '@/services/PrayerNotifications';
 
 export default function SettingsScreen() {
@@ -105,7 +105,7 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowTitle}>Terms & Conditions</Text>
-              <Text style={styles.rowDescription}>Usage terms for this app</Text>
+              <Text style={styles.rowDescription}>Updated {LAST_UPDATED}</Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
           </TouchableOpacity>
@@ -120,7 +120,7 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowTitle}>Privacy Policy</Text>
-              <Text style={styles.rowDescription}>How we handle your data</Text>
+              <Text style={styles.rowDescription}>Updated {LAST_UPDATED}</Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
           </TouchableOpacity>

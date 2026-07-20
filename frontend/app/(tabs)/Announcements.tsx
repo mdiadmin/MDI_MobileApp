@@ -1,25 +1,33 @@
-import React, { useState, useEffect, useCallback, useMemo, useId } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useId, useRef } from 'react';
 import {
   View,
   Text,
   FlatList,
   RefreshControl,
-  Image,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   StatusBar,
   Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
-import { WebView } from 'react-native-webview';
+import { WebView, WebViewNavigation } from 'react-native-webview';
+import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
 import GeometricPattern from '@/components/GeometricPattern';
 import LoadingState from '@/components/LoadingState';
 import { colors, shadows } from '@/constants/theme';
 
-const WP_POSTS_URL = 'https://daruliman.org/mystaging02/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10';
+const WP_POSTS_URL = Constants.expoConfig?.extra?.wpPostsUrl as string;
+const ALLOWED_WEBVIEW_ORIGINS = ['https://daruliman.org'];
+
+// Cache-first paint: a cold start shows the last-fetched posts instantly
+// instead of a blank loading screen, while a fresh fetch runs underneath.
+const POSTS_CACHE_KEY = '@announcements_cache_v1';
 
 const HIDE_HEADER_FOOTER_SCRIPT = `
   const style = document.createElement('style');
@@ -60,7 +68,12 @@ interface WPPost {
   author_info?: { display_name: string; author_link?: string };
   featured_image_src_large?: [string, number, number, boolean] | false;
   category_info?: { term_id: number; name: string }[];
-  _embedded?: { 'wp:featuredmedia'?: Array<{ source_url: string }> };
+  _embedded?: {
+    'wp:featuredmedia'?: Array<{
+      source_url: string;
+      media_details?: { sizes?: Record<string, { source_url: string; width: number; height: number }> };
+    }>;
+  };
 }
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
@@ -69,8 +82,8 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   Programs: { bg: '#EEF0FF', text: '#4A5AC9' },
 };
 
-function decodeHtmlEntities(text: string): string {
-  const entities: Record<string, string> = {
+// Hoisted to module scope so it's built once, not on every decode call.
+const HTML_ENTITY_MAP: Record<string, string> = {
     '&amp;': '&',
     '&quot;': '"',
     '&#039;': "'",
@@ -82,12 +95,11 @@ function decodeHtmlEntities(text: string): string {
     '&#8220;': '\u201C',
     '&#8221;': '\u201D',
     '&#8230;': '…',
-  };
+};
+const HTML_ENTITY_REGEX = new RegExp(Object.keys(HTML_ENTITY_MAP).join('|'), 'g');
 
-  let decoded = text;
-  Object.entries(entities).forEach(([entity, char]) => {
-    decoded = decoded.split(entity).join(char);
-  });
+function decodeHtmlEntities(text: string): string {
+  let decoded = text.replace(HTML_ENTITY_REGEX, (match) => HTML_ENTITY_MAP[match]);
   decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
   decoded = decoded.replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)));
   return decoded;
@@ -116,11 +128,19 @@ function getPrimaryCategory(post: WPPost): string {
   return post.category_info?.[0]?.name ?? 'General';
 }
 
-function getImageUrl(post: WPPost): string | undefined {
-  return post._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? undefined; undefined;
+// Picks an appropriately-sized rendition instead of always downloading the
+// original upload (often 2000px+, several MB) for a 72x72 thumbnail.
+function getImageUrl(post: WPPost, size: 'thumbnail' | 'featured' = 'featured'): string | undefined {
+  const media = post._embedded?.['wp:featuredmedia']?.[0];
+  if (!media) return undefined;
+  const sizes = media.media_details?.sizes;
+  if (size === 'thumbnail') {
+    return sizes?.thumbnail?.source_url ?? sizes?.medium?.source_url ?? media.source_url;
+  }
+  return sizes?.medium_large?.source_url ?? sizes?.large?.source_url ?? media.source_url;
 }
 
-function CategoryPill({ category }: { category: string }) {
+function CategoryPillImpl({ category }: { category: string }) {
   const style = CATEGORY_COLORS[category] ?? { bg: colors.secondary, text: colors.primary };
   return (
     <View style={[styles.categoryPill, { backgroundColor: style.bg }]}>
@@ -129,6 +149,7 @@ function CategoryPill({ category }: { category: string }) {
     </View>
   );
 }
+const CategoryPill = React.memo(CategoryPillImpl);
 
 function ImageGradientOverlay() {
   const gradientId = useId().replace(/:/g, '');
@@ -150,13 +171,18 @@ function ImageGradientOverlay() {
 function FeaturedCard({ post, onPress }: { post: WPPost; onPress: () => void }) {
   const title = decodeHtmlEntities(post.title.rendered);
   const category = getPrimaryCategory(post);
-  const imageUrl = getImageUrl(post);
+  const imageUrl = getImageUrl(post, 'featured');
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={[styles.featuredCard, shadows.card]}>
       <View style={styles.featuredImageWrap}>
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={styles.featuredImage} resizeMode="cover" />
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.featuredImage}
+            contentFit="cover"
+            transition={150}
+          />
         ) : null}
         <ImageGradientOverlay />
         <View style={styles.featuredCategory}>
@@ -175,17 +201,22 @@ function FeaturedCard({ post, onPress }: { post: WPPost; onPress: () => void }) 
 }
 
 // AnnouncementRow Component
-function AnnouncementRow({ post, onPress }: { post: WPPost; onPress: () => void }) {
+function AnnouncementRowImpl({ post, onPress }: { post: WPPost; onPress: () => void }) {
   const title = decodeHtmlEntities(post.title.rendered);
   const excerpt = stripHtml(post.excerpt.rendered);
   const category = getPrimaryCategory(post);
-  const imageUrl = getImageUrl(post);
+  const imageUrl = getImageUrl(post, 'thumbnail');
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={[styles.rowCard, shadows.action]}>
       <View style={styles.thumbnail}>
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} resizeMode="cover" />
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.thumbnailImage}
+            contentFit="cover"
+            transition={150}
+          />
         ) : (
           <View style={styles.thumbnailPlaceholder}>
             <Text style={styles.thumbnailEmoji}>🕌</Text>
@@ -206,6 +237,7 @@ function AnnouncementRow({ post, onPress }: { post: WPPost; onPress: () => void 
     </TouchableOpacity>
   );
 }
+const AnnouncementRow = React.memo(AnnouncementRowImpl);
 
 // AnnouncementsHeader Component
 function AnnouncementsHeader() {
@@ -235,23 +267,29 @@ export default function Announcements() {
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedPost, setSelectedPost] = useState<WPPost | null>(null);
+  const hasDataRef = useRef(false);
 
   const fetchPosts = useCallback(async () => {
     try {
-      setError(null);
       const response = await fetch(WP_POSTS_URL);
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);
       }
       const data: WPPost[] = await response.json();
-      
+
       const sortedData = data.sort((a, b) => {
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
-      
+
+      hasDataRef.current = true;
       setPosts(sortedData);
+      setError(null);
+      AsyncStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(sortedData)).catch(() => {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load announcements');
+      // Only surface the error if we have nothing cached to show instead.
+      if (!hasDataRef.current) {
+        setError(err instanceof Error ? err.message : 'Failed to load announcements');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -259,7 +297,23 @@ export default function Announcements() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    AsyncStorage.getItem(POSTS_CACHE_KEY)
+      .then((raw) => {
+        if (cancelled || !raw) return;
+        const cached: WPPost[] = JSON.parse(raw);
+        hasDataRef.current = true;
+        setPosts(cached);
+        setLoading(false);
+      })
+      .catch(() => {});
+
     fetchPosts();
+
+    return () => {
+      cancelled = true;
+    };
   }, [fetchPosts]);
 
   const onRefresh = () => {
@@ -368,12 +422,27 @@ export default function Announcements() {
           </View>
           
           {selectedPost && (
-            <WebView 
-              source={{ uri: selectedPost.link }} 
-              style={styles.webview} 
+            <WebView
+              source={{ uri: selectedPost.link }}
+              style={styles.webview}
               startInLoadingState={true}
               injectedJavaScript={HIDE_HEADER_FOOTER_SCRIPT}
               javaScriptEnabled={true}
+              originWhitelist={ALLOWED_WEBVIEW_ORIGINS.map((o) => `${o}/*`)}
+              setSupportMultipleWindows={false}
+              onShouldStartLoadWithRequest={(request: WebViewNavigation) => {
+                if (ALLOWED_WEBVIEW_ORIGINS.some((origin) => request.url.startsWith(origin))) {
+                  return true;
+                }
+                WebBrowser.openBrowserAsync(request.url);
+                return false;
+              }}
+              renderError={() => (
+                <View style={styles.webviewError}>
+                  <MaterialCommunityIcons name="wifi-off" size={32} color={colors.muted} />
+                  <Text style={styles.webviewErrorText}>Couldn't load this page. Check your connection.</Text>
+                </View>
+              )}
             />
           )}
         </SafeAreaView>
@@ -632,8 +701,22 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_600SemiBold', 
     color: colors.foreground 
   },
-  webview: { 
-    flex: 1, 
-    backgroundColor: colors.background 
-  }
+  webview: {
+    flex: 1,
+    backgroundColor: colors.background
+  },
+  webviewError: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 24,
+    backgroundColor: colors.background,
+  },
+  webviewErrorText: {
+    color: colors.muted,
+    fontSize: 13,
+    textAlign: 'center',
+    fontFamily: 'PlusJakartaSans_400Regular',
+  },
 });

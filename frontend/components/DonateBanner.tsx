@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,46 +6,42 @@ import {
   StyleSheet,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as WebBrowser from 'expo-web-browser';
 import GeometricPattern from '@/components/GeometricPattern';
-import DonateModal from '@/components/DonateModal';
 import { colors, shadows } from '@/constants/theme';
 
+const DONATE_URL = 'https://app.irm.io/daruliman.org';
+
 export default function DonateBanner() {
-  const [showDonateModal, setShowDonateModal] = useState(false);
-
   const handleDonatePress = () => {
-    setShowDonateModal(true);
-  };
-
-  const handleCloseDonate = () => {
-    setShowDonateModal(false);
+    // Opens in SFSafariViewController / Chrome Custom Tabs rather than an
+    // in-app WebView: the real domain is visible (important for a page
+    // asking for a credit card), and the system password manager / Apple
+    // & Google Pay autofill work there but not inside a WebView.
+    WebBrowser.openBrowserAsync(DONATE_URL);
   };
 
   return (
-    <>
-      <View style={styles.section}>
-        <View style={styles.banner}>
-          <GeometricPattern opacity={0.07} />
-          <View style={styles.accentBar} />
+    <View style={styles.section}>
+      <View style={styles.banner}>
+        <GeometricPattern opacity={0.07} />
+        <View style={styles.accentBar} />
 
-          <View style={styles.content}>
-            <Text style={styles.title}>Support Our Masjid</Text>
-            <Text style={styles.subtitle}>Every contribution makes a difference.</Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={handleDonatePress}
-            style={[styles.button, shadows.donate]}
-            activeOpacity={0.85}
-          >
-            <MaterialCommunityIcons name="heart" size={14} color="#fff" />
-            <Text style={styles.buttonText}>Donate</Text>
-          </TouchableOpacity>
+        <View style={styles.content}>
+          <Text style={styles.title}>Support Our Masjid</Text>
+          <Text style={styles.subtitle}>Every contribution makes a difference.</Text>
         </View>
-      </View>
 
-      <DonateModal visible={showDonateModal} onClose={handleCloseDonate} />
-    </>
+        <TouchableOpacity
+          onPress={handleDonatePress}
+          style={[styles.button, shadows.donate]}
+          activeOpacity={0.85}
+        >
+          <MaterialCommunityIcons name="heart" size={14} color="#fff" />
+          <Text style={styles.buttonText}>Donate</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Header from '@/components/Header';
 import DateStrip from '@/components/DateStrip';
 import PrayerTimesWidget from '@/components/PrayerTimesWidget';
@@ -17,22 +16,20 @@ export default function Index() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <View style={styles.screen}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          <Header />
-          <DateStrip now={now} />
-          <PrayerTimesWidget />
-          <QuickActions />
-          <DonateBanner />
-        </ScrollView>
-      </View>
-    </SafeAreaProvider>
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <Header />
+        <DateStrip now={now} />
+        <PrayerTimesWidget />
+        <QuickActions />
+        <DonateBanner />
+      </ScrollView>
+    </View>
   );
 }
 

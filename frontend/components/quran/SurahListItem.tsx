@@ -8,7 +8,7 @@ type SurahListItemProps = {
   onPress: () => void;
 };
 
-export default function SurahListItem({ surah, onPress }: SurahListItemProps) {
+function SurahListItem({ surah, onPress }: SurahListItemProps) {
   const isMeccan = surah.revelationType === 'Meccan';
 
   return (
@@ -32,6 +32,8 @@ export default function SurahListItem({ surah, onPress }: SurahListItemProps) {
     </TouchableOpacity>
   );
 }
+
+export default React.memo(SurahListItem);
 
 const styles = StyleSheet.create({
   card: {

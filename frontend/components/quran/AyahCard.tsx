@@ -8,7 +8,7 @@ type AyahCardProps = {
   translation?: Ayah;
 };
 
-export default function AyahCard({ arabic, translation }: AyahCardProps) {
+function AyahCard({ arabic, translation }: AyahCardProps) {
   return (
     <View style={[styles.card, shadows.action]}>
       <View style={styles.ayahBadge}>
@@ -25,6 +25,8 @@ export default function AyahCard({ arabic, translation }: AyahCardProps) {
     </View>
   );
 }
+
+export default React.memo(AyahCard);
 
 const styles = StyleSheet.create({
   card: {

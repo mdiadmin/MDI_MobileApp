@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import ScreenHeader from '@/components/ScreenHeader';
 import SurahListItem from '@/components/quran/SurahListItem';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
-import { getSurahList } from '@/services/quranApi';
+import { getCachedSurahList, getSurahList } from '@/services/quranApi';
 import { Surah } from '@/types/quran';
 import { colors, shadows } from '@/constants/theme';
 
@@ -14,12 +14,39 @@ export default function SurahListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const hasDataRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
+
+    // Paint instantly from cache (the surah list rarely changes), then
+    // refresh from the network in the background.
+    getCachedSurahList().then((cached) => {
+      if (cancelled || !cached) return;
+      hasDataRef.current = true;
+      setSurahs(cached);
+      setLoading(false);
+    });
+
     getSurahList()
-      .then(setSurahs)
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
+      .then((fresh) => {
+        if (cancelled) return;
+        hasDataRef.current = true;
+        setSurahs(fresh);
+        setError(null);
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        // Only surface the error if we have nothing cached to show instead.
+        if (!hasDataRef.current) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {

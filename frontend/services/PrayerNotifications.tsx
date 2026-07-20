@@ -2,26 +2,25 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const url = 'https://portal.ad-din.ca/v1/masjid/Prayer/GetPrayerTimesOfDay?masjidId=542';
-
-// This is a public api key (published in the masjid's display page).
-const ADDIN_API_KEY =
-  'WVeh6FdhekwxiEiaxhKGsvy7sOh9V4Y6rWDt2vyoFvvMAFQ2eqxYBePjW1EXEAOL8jr6j0cddjcCJRZRAtrobKmXDy7BCEqi';
+import { Prayer, toApiDay, combineDateTime, formatTime, getPrayerTimes, prunePrayerCache } from './prayerTimes';
 
 // Persisted on/off flag for the Settings toggle.
 const ENABLED_KEY = '@prayer_notifications_enabled';
 
-// Per-day cache of fetched prayer times, keyed by the API day string.
-const CACHE_PREFIX = '@prayer_times_cache:';
-
-// How long a cached day is treated as fresh before we bother re-fetching it.
-// Repeated foregrounds within this window make zero API calls; a given date's
-// times don't change often, so a half-day window is plenty.
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-
 // Android notification channel id.
 const CHANNEL_ID = 'prayer-times';
+
+// Identifier prefix for every notification this module schedules, so we can
+// cancel exactly our own notifications instead of nuking anything another
+// feature might schedule (cancelAllScheduledNotificationsAsync affects the
+// whole app, not just this module).
+const NOTIF_ID_PREFIX = 'prayer-notif:';
+
+// Skip a redundant refresh if we already refreshed today within this
+// window — repeated foregrounds (e.g. quick app switches) would otherwise
+// cancel + reschedule up to 35 notifications every time.
+const LAST_REFRESH_KEY = '@prayer_notifications_last_refresh';
+const REFRESH_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 // The five daily prayers we schedule reminders for (the API also returns
 // Sunrise/Sunset/Zawal/Jumah, which we skip).
@@ -32,13 +31,6 @@ const NOTIFY_PRAYERS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 // This means reminders keep firing even if the app isn't opened for a week.
 const DAYS_AHEAD = 7;
 
-type Prayer = {
-  prayerName: string;
-  prayerBegins: string | null; // "13:23:00"
-  prayerAdhan: string | null;
-  prayerIqamah: string | null;
-};
-
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -48,109 +40,15 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// The API expects a non-zero-padded date, e.g. "2026-7-14".
-function toApiDay(date: Date) {
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-}
-
-function combineDateTime(date: Date, hms: string) {
-  const [h, m, s] = hms.split(':').map(Number);
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m, s || 0);
-}
-
-function formatTime(hms: string) {
-  const [h, m] = hms.split(':').map(Number);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const hour12 = ((h + 11) % 12) + 1;
-  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
-}
-
-type CacheEntry = { fetchedAt: number; prayers: Prayer[] };
-
-async function writePrayerCache(day: string, prayers: Prayer[]) {
-  try {
-    const entry: CacheEntry = { fetchedAt: Date.now(), prayers };
-    await AsyncStorage.setItem(CACHE_PREFIX + day, JSON.stringify(entry));
-  } catch {
-    // caching is best-effort — ignore write failures
-  }
-}
-
-async function readPrayerCache(day: string): Promise<CacheEntry | null> {
-  try {
-    const raw = await AsyncStorage.getItem(CACHE_PREFIX + day);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.prayers)) return parsed as CacheEntry;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// Raw network fetch — always hits the API and refreshes the cache on success.
-async function fetchPrayerTimes(date = new Date()): Promise<Prayer[]> {
-  const day = toApiDay(date);
-  const time = date.toTimeString().split(' ')[0]; // "HH:MM:SS"
-
-  const res = await fetch(`${url}&day=${day}&time=${time}`, {
-    headers: { 'ADDIN-API-KEY': ADDIN_API_KEY },
-  });
-
-  if (!res.ok) throw new Error(`Prayer times request failed: ${res.status}`);
-
-  const json = await res.json();
-  const prayers = json?.data?.prayerOfDay?.singlePrayers;
-  if (!Array.isArray(prayers)) throw new Error('Unexpected prayer times response shape');
-
-  await writePrayerCache(day, prayers as Prayer[]);
-  return prayers as Prayer[];
-}
-
-// Cache-first accessor used by the scheduler. Avoids re-hitting the API for a
-// day we already fetched recently (so repeated foregrounds cost no network),
-// and falls back to any cached copy — regardless of age — when offline.
-async function getPrayerTimes(date: Date): Promise<Prayer[]> {
-  const day = toApiDay(date);
-  const cached = await readPrayerCache(day);
-
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-    return cached.prayers;
-  }
-
-  try {
-    return await fetchPrayerTimes(date);
-  } catch (err) {
-    if (cached) return cached.prayers;
-    throw err;
-  }
-}
-
-// Removes cached days whose date is more than 7 days in the past. The scheduler
-// only ever looks forward, so past days are dead weight once they age out.
-async function prunePrayerCache() {
-  try {
-    const keys = await AsyncStorage.getAllKeys();
-    const cacheKeys = keys.filter((k) => k.startsWith(CACHE_PREFIX));
-    if (cacheKeys.length === 0) return;
-
-    const now = new Date();
-    const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).getTime();
-
-    const stale = cacheKeys.filter((k) => {
-      const [y, m, d] = k.slice(CACHE_PREFIX.length).split('-').map(Number);
-      if (!y || !m || !d) return false; // leave anything unparseable alone
-      return new Date(y, m - 1, d).getTime() < cutoff;
-    });
-
-    if (stale.length) await AsyncStorage.multiRemove(stale);
-  } catch {
-    // best-effort cleanup — ignore failures
-  }
-}
-
 export async function arePrayerNotificationsEnabled() {
   return (await AsyncStorage.getItem(ENABLED_KEY)) === 'true';
+}
+
+// True once the user has been asked (via the in-app soft prompt in
+// RootLayout) whether they want prayer notifications, regardless of which
+// way they answered. Used to decide whether to show that prompt again.
+export async function hasPrayerNotificationDecision() {
+  return (await AsyncStorage.getItem(ENABLED_KEY)) !== null;
 }
 
 async function setEnabledFlag(value: boolean) {
@@ -176,23 +74,52 @@ export async function ensureNotificationPermission() {
   return finalStatus === 'granted';
 }
 
-export async function cancelPrayerNotifications() {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+// Cancels only the notifications this module scheduled (identified by
+// NOTIF_ID_PREFIX), leaving anything else the app may have scheduled intact.
+async function cancelOwnedPrayerNotifications() {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const owned = scheduled.filter((n) => n.identifier.startsWith(NOTIF_ID_PREFIX));
+  await Promise.all(owned.map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
 }
 
-// Cancels and re-schedules local notifications for the next DAYS_AHEAD days at
-// each prayer's adhan time. No-op if the feature is disabled or permission is
-// not granted. Safe to call repeatedly (on launch, on foreground, at midnight).
-export async function refreshPrayerNotifications() {
+export async function cancelPrayerNotifications() {
+  await cancelOwnedPrayerNotifications();
+  await AsyncStorage.removeItem(LAST_REFRESH_KEY);
+}
+
+// In-flight guard so an overlapping call (e.g. a foreground event firing
+// while the midnight timer is already mid-refresh) reuses the same promise
+// instead of running two interleaved cancel/schedule passes.
+let refreshInFlight: Promise<void> | null = null;
+
+async function readLastRefresh(): Promise<{ at: number; day: string } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_REFRESH_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshPrayerNotificationsNow(force: boolean) {
   if (!(await arePrayerNotificationsEnabled())) return;
   if (!(await ensureNotificationPermission())) return;
 
-  await Notifications.cancelAllScheduledNotificationsAsync();
-
   const now = new Date();
+  const today = toApiDay(now);
+
+  if (!force) {
+    const last = await readLastRefresh();
+    if (last && last.day === today && Date.now() - last.at < REFRESH_MIN_INTERVAL_MS) {
+      return; // already refreshed today's schedule recently — nothing to do
+    }
+  }
+
+  await cancelOwnedPrayerNotifications();
 
   for (let i = 0; i < DAYS_AHEAD; i++) {
     const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const day = toApiDay(date);
 
     let prayers: Prayer[];
     try {
@@ -211,6 +138,7 @@ export async function refreshPrayerNotifications() {
       if (when.getTime() <= now.getTime() + 1000) continue; // skip past/near-now
 
       await Notifications.scheduleNotificationAsync({
+        identifier: `${NOTIF_ID_PREFIX}${day}:${p.prayerName}`,
         content: {
           title: p.prayerName,
           body: `It's time for ${p.prayerName} — ${formatTime(time)}`,
@@ -225,7 +153,23 @@ export async function refreshPrayerNotifications() {
     }
   }
 
+  await AsyncStorage.setItem(LAST_REFRESH_KEY, JSON.stringify({ at: Date.now(), day: today }));
   await prunePrayerCache();
+}
+
+// Cancels and re-schedules local notifications for the next DAYS_AHEAD days at
+// each prayer's adhan time. No-op if the feature is disabled or permission is
+// not granted. Safe to call repeatedly (on launch, on foreground, at
+// midnight): concurrent calls share one in-flight run, and a same-day call
+// within REFRESH_MIN_INTERVAL_MS of the last one is skipped entirely unless
+// `force` is passed (used when the user just flipped the Settings toggle on).
+export async function refreshPrayerNotifications(options?: { force?: boolean }): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = refreshPrayerNotificationsNow(!!options?.force).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 // Turns the feature on (requesting permission first) or off. Returns the
@@ -238,7 +182,7 @@ export async function setPrayerNotificationsEnabled(value: boolean): Promise<boo
       return false;
     }
     await setEnabledFlag(true);
-    await refreshPrayerNotifications();
+    await refreshPrayerNotifications({ force: true });
     return true;
   }
 
@@ -247,18 +191,14 @@ export async function setPrayerNotificationsEnabled(value: boolean): Promise<boo
   return false;
 }
 
-// Called once on app launch. On the very first run it prompts for notification
-// permission and, if granted, turns reminders on by default. On later runs it
-// just refreshes the schedule and respects whatever the user set in Settings.
+// Called on app launch and whenever the app returns to the foreground. The
+// very first on/off decision is made exactly once, by the user, via the
+// in-app soft prompt in RootLayout (which calls setPrayerNotificationsEnabled
+// directly) — this function only refreshes an *already-made* decision, so it
+// never itself triggers the OS permission dialog.
 export async function initPrayerNotifications() {
-  const stored = await AsyncStorage.getItem(ENABLED_KEY);
-
-  if (stored === null) {
-    const granted = await ensureNotificationPermission();
-    await setEnabledFlag(granted);
-    if (granted) await refreshPrayerNotifications();
-    return;
-  }
+  const decided = await hasPrayerNotificationDecision();
+  if (!decided) return;
 
   await refreshPrayerNotifications();
 }
