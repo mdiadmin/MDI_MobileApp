@@ -13,6 +13,17 @@ export const MAX_CACHE_BYTES = 50 * 1024 * 1024; // ~50MB
 // user needing to open them first.
 export const PROACTIVE_CACHE_COUNT = 15;
 
+// Lightweight metadata (title/excerpt/date/category — no body, no images)
+// is much cheaper to keep than full content, but "cheap per item" still
+// adds up over a masjid's entire posting history — over many years of
+// scrolling, an unbounded metadata list would mean every background
+// refresh re-serializes an ever-growing AsyncStorage blob, and every
+// infinite-scroll page fetched would make that write slower than the last.
+// Bounded well above MAX_CACHED_POSTS so recent-ish browsing history still
+// survives offline/restart; older posts simply stop being remembered
+// between sessions (they're still fetchable again from the server).
+export const MAX_METADATA_POSTS = 500;
+
 // Posts per page for the list endpoint / infinite scroll.
 export const POSTS_PAGE_SIZE = 10;
 

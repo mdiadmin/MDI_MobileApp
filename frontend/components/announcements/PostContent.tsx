@@ -73,6 +73,13 @@ function isBlank(nodes: ContentNode[]): boolean {
   return flattenText({ type: 'element', tag: '', attribs: {}, children: nodes }).trim().length === 0;
 }
 
+// Tracks how many flow paragraphs have been rendered so far, shared by
+// reference across the whole recursive walk — the first one gets the
+// larger "lede" treatment, like a magazine intro line.
+interface RenderState {
+  paragraphIndex: number;
+}
+
 // ---------- block-level rendering ----------
 
 function PostImage({ src, attribs, resolver, category }: { src: string; attribs: Record<string, string>; resolver: ImageResolver; category: string }) {
@@ -119,14 +126,38 @@ function findFirst(nodes: ContentNode[], tag: string): Extract<ContentNode, { ty
   return null;
 }
 
-function renderBlocks(nodes: ContentNode[], resolver: ImageResolver, category: string, keyPrefix: string): React.ReactNode[] {
+function renderParagraph(inline: React.ReactNode[], key: string, state: RenderState, quote: boolean): React.ReactNode {
+  if (quote) {
+    return (
+      <Text key={key} style={styles.quoteText}>
+        {inline}
+      </Text>
+    );
+  }
+  const isLede = state.paragraphIndex === 0;
+  state.paragraphIndex++;
+  return (
+    <Text key={key} style={isLede ? styles.lede : styles.paragraph}>
+      {inline}
+    </Text>
+  );
+}
+
+function renderBlocks(
+  nodes: ContentNode[],
+  resolver: ImageResolver,
+  category: string,
+  keyPrefix: string,
+  state: RenderState,
+  quote = false
+): React.ReactNode[] {
   const out: React.ReactNode[] = [];
 
   nodes.forEach((node, i) => {
     const key = `${keyPrefix}-${i}`;
 
     if (node.type === 'text') {
-      if (node.text.trim()) out.push(<Text key={key} style={styles.paragraph}>{node.text.trim()}</Text>);
+      if (node.text.trim()) out.push(renderParagraph([node.text.trim()], key, state, quote));
       return;
     }
 
@@ -144,11 +175,7 @@ function renderBlocks(nodes: ContentNode[], resolver: ImageResolver, category: s
     switch (node.tag) {
       case 'p': {
         if (isBlank(node.children)) return;
-        out.push(
-          <Text key={key} style={styles.paragraph}>
-            {renderInline(node.children, key)}
-          </Text>
-        );
+        out.push(renderParagraph(renderInline(node.children, key), key, state, quote));
         return;
       }
       case 'ul':
@@ -159,7 +186,13 @@ function renderBlocks(nodes: ContentNode[], resolver: ImageResolver, category: s
           <View key={key} style={styles.list}>
             {items.map((li, idx) => (
               <View key={`${key}-li-${idx}`} style={styles.listItemRow}>
-                <Text style={styles.listBullet}>{node.tag === 'ol' ? `${idx + 1}.` : '•'}</Text>
+                {node.tag === 'ol' ? (
+                  <Text style={styles.listBulletNumber}>{`${idx + 1}.`}</Text>
+                ) : (
+                  <View style={styles.listBulletDotWrap}>
+                    <View style={styles.listBulletDot} />
+                  </View>
+                )}
                 <Text style={styles.listItemText}>{renderInline(li.children, `${key}-li-${idx}`)}</Text>
               </View>
             ))}
@@ -170,7 +203,7 @@ function renderBlocks(nodes: ContentNode[], resolver: ImageResolver, category: s
       case 'figure': {
         const img = findFirst(node.children, 'img');
         if (!img || !img.attribs.src) {
-          out.push(...renderBlocks(node.children, resolver, category, key));
+          out.push(...renderBlocks(node.children, resolver, category, key, state, quote));
           return;
         }
         out.push(<PostImage key={key} src={img.attribs.src} attribs={img.attribs} resolver={resolver} category={category} />);
@@ -205,23 +238,19 @@ function renderBlocks(nodes: ContentNode[], resolver: ImageResolver, category: s
           return;
         }
         if (isBlank(node.children)) return;
-        out.push(
-          <Text key={key} style={styles.paragraph}>
-            {renderInline([node], key)}
-          </Text>
-        );
+        out.push(renderParagraph(renderInline([node], key), key, state, quote));
         return;
       }
       case 'blockquote': {
         out.push(
           <View key={key} style={styles.quote}>
-            {renderBlocks(node.children, resolver, category, key)}
+            {renderBlocks(node.children, resolver, category, key, state, true)}
           </View>
         );
         return;
       }
       default:
-        out.push(...renderBlocks(node.children, resolver, category, key));
+        out.push(...renderBlocks(node.children, resolver, category, key, state, quote));
     }
   });
 
@@ -229,21 +258,34 @@ function renderBlocks(nodes: ContentNode[], resolver: ImageResolver, category: s
 }
 
 export default function PostContent({ nodes, imageResolver, category }: { nodes: ContentNode[]; imageResolver: ImageResolver; category: string }) {
-  return <View style={styles.container}>{renderBlocks(nodes, imageResolver, category, 'n')}</View>;
+  const state: RenderState = { paragraphIndex: 0 };
+  return <View style={styles.container}>{renderBlocks(nodes, imageResolver, category, 'n', state)}</View>;
 }
+
+// Slightly softened body ink (colors.foreground at ~82% opacity) — full-
+// strength near-black-green reads as too heavy across a whole article;
+// headings and the lede stay at full strength for contrast.
+const BODY_INK = 'rgba(15, 44, 30, 0.82)';
 
 const styles = StyleSheet.create({
   container: {
-    gap: 14,
+    gap: 16,
   },
   paragraph: {
-    color: colors.foreground,
-    fontSize: 15,
-    lineHeight: 24,
+    color: BODY_INK,
+    fontSize: 15.5,
+    lineHeight: 25,
     fontFamily: 'PlusJakartaSans_400Regular',
+  },
+  lede: {
+    color: colors.foreground,
+    fontSize: 18,
+    lineHeight: 28,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
   },
   bold: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: colors.foreground,
   },
   italic: {
     fontStyle: 'italic',
@@ -258,31 +300,45 @@ const styles = StyleSheet.create({
   headingLarge: {
     fontSize: 20,
     lineHeight: 27,
+    marginTop: 8,
     fontFamily: 'DMSerifDisplay_400Regular',
   },
   headingSmall: {
     fontSize: 16,
     lineHeight: 22,
+    marginTop: 6,
     fontFamily: 'PlusJakartaSans_700Bold',
   },
   list: {
-    gap: 8,
+    gap: 10,
   },
   listItemRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
-  listBullet: {
+  listBulletNumber: {
     color: colors.accent,
-    fontSize: 15,
+    fontSize: 15.5,
+    lineHeight: 25,
     fontFamily: 'PlusJakartaSans_600SemiBold',
-    width: 18,
+    width: 20,
+  },
+  listBulletDotWrap: {
+    width: 20,
+    alignItems: 'center',
+  },
+  listBulletDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginTop: 9,
   },
   listItemText: {
     flex: 1,
-    color: colors.foreground,
-    fontSize: 15,
-    lineHeight: 24,
+    color: BODY_INK,
+    fontSize: 15.5,
+    lineHeight: 25,
     fontFamily: 'PlusJakartaSans_400Regular',
   },
   image: {
@@ -304,8 +360,18 @@ const styles = StyleSheet.create({
   quote: {
     borderLeftWidth: 3,
     borderLeftColor: colors.accent,
-    paddingLeft: 14,
+    backgroundColor: colors.accentBg,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     gap: 10,
+  },
+  quoteText: {
+    color: colors.foreground,
+    fontSize: 16.5,
+    lineHeight: 25,
+    fontStyle: 'italic',
+    fontFamily: 'DMSerifDisplay_400Regular',
   },
   button: {
     flexDirection: 'row',

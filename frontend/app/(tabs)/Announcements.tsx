@@ -34,7 +34,7 @@ import {
 import { fetchPostById, fetchPostsPage, toPostMeta } from '@/services/announcementsApi';
 import { parseWpContent } from '@/services/htmlContent';
 import { getStarterPosts } from '@/services/starterSnapshot';
-import { ImageResolver, PostMeta, WPPost } from '@/types/announcements';
+import { ImageResolver, PostMeta } from '@/types/announcements';
 
 function buildLocalResolver(imageMap: Record<string, string> | null | undefined): ImageResolver {
   return (src) => {
@@ -50,7 +50,6 @@ export default function Announcements() {
   const isOnline = netInfo.isConnected !== false;
 
   const [posts, setPosts] = useState<PostMeta[]>([]);
-  const [postsById, setPostsById] = useState<Record<number, WPPost>>({});
   const [usingStarter, setUsingStarter] = useState(false);
   const [offlineImageMap, setOfflineImageMap] = useState<Record<number, string>>({});
 
@@ -77,14 +76,9 @@ export default function Announcements() {
   const loadFirstPage = useCallback(async () => {
     try {
       const { posts: freshPosts, totalPages: tp } = await fetchPostsPage(1);
+      const freshMeta = freshPosts.map(toPostMeta);
 
-      setPostsById((prev) => {
-        const next = { ...prev };
-        freshPosts.forEach((p) => (next[p.id] = p));
-        return next;
-      });
-
-      const metaList = await reconcileFreshMeta(freshPosts.map(toPostMeta), tp <= 1);
+      const metaList = await reconcileFreshMeta(freshMeta, tp <= 1);
       hasDataRef.current = true;
       setPosts(metaList);
       setUsingStarter(false);
@@ -93,7 +87,7 @@ export default function Announcements() {
       setError(null);
 
       await markSynced();
-      proactivelyCacheRecent(freshPosts).then(refreshOfflineImageMap).catch(() => {});
+      proactivelyCacheRecent(freshMeta).then(refreshOfflineImageMap).catch(() => {});
     } catch (err) {
       // Only surface the error if we have nothing at all to show instead.
       if (!hasDataRef.current) {
@@ -147,11 +141,6 @@ export default function Announcements() {
     try {
       const nextPage = page + 1;
       const { posts: freshPosts, totalPages: tp } = await fetchPostsPage(nextPage);
-      setPostsById((prev) => {
-        const next = { ...prev };
-        freshPosts.forEach((p) => (next[p.id] = p));
-        return next;
-      });
       const metaList = await mergeCachedMeta(freshPosts.map(toPostMeta));
       setPosts(metaList);
       setPage(nextPage);
@@ -198,20 +187,9 @@ export default function Announcements() {
         return;
       }
 
-      const inMemory = postsById[meta.id];
-
-      if (inMemory) {
-        const nodes = parseWpContent(inMemory.content.rendered);
-        if (isOnline) {
-          setReaderContent({ nodes, imageResolver: remoteResolver });
-        } else {
-          const cached = await getCachedContent(meta.id);
-          setReaderContent({ nodes, imageResolver: buildLocalResolver(cached?.images) });
-        }
-        cacheViewedPost(inMemory).then(refreshOfflineImageMap).catch(() => {});
-        return;
-      }
-
+      // Cache first — a post's full body is never held in memory just from
+      // scrolling past it, so this (or the live fetch below) is the only
+      // place content actually gets loaded.
       const cached = await getCachedContent(meta.id);
       if (cached) {
         setReaderContent({ nodes: cached.nodes, imageResolver: buildLocalResolver(cached.images) });
@@ -224,7 +202,6 @@ export default function Announcements() {
       setReaderLoading(true);
       try {
         const fullPost = await fetchPostById(meta.id);
-        setPostsById((prev) => ({ ...prev, [meta.id]: fullPost }));
         setReaderContent({ nodes: parseWpContent(fullPost.content.rendered), imageResolver: remoteResolver });
         cacheViewedPost(fullPost).then(refreshOfflineImageMap).catch(() => {});
       } catch {
@@ -233,7 +210,7 @@ export default function Announcements() {
         setReaderLoading(false);
       }
     },
-    [usingStarter, postsById, isOnline, refreshOfflineImageMap]
+    [usingStarter, isOnline, refreshOfflineImageMap]
   );
 
   if (loading) return <LoadingState message="Loading announcements..." />;
@@ -265,6 +242,11 @@ export default function Announcements() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         onEndReachedThreshold={0.4}
         onEndReached={loadNextPage}
+        removeClippedSubviews
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        updateCellsBatchingPeriod={50}
         ListHeaderComponent={
           <>
             {usingStarter ? (

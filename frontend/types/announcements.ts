@@ -1,10 +1,12 @@
-// Raw WordPress REST API post shape (wp-json/wp/v2/posts).
-export interface WPPost {
+// Raw WordPress REST API post shape (wp-json/wp/v2/posts) — the list/paged
+// endpoint deliberately omits `content`, so scrolling the feed never
+// fetches or holds full article bodies for posts that are only being
+// browsed as a row, not read.
+export interface WPPostSummary {
   id: number;
   date: string;
   link: string;
   title: { rendered: string };
-  content: { rendered: string };
   excerpt: { rendered: string };
   category_info?: { term_id: number; name: string }[];
   _embedded?: {
@@ -18,8 +20,15 @@ export interface WPPost {
 }
 
 export interface WPPostsPage {
-  posts: WPPost[];
+  posts: WPPostSummary[];
   totalPages: number;
+}
+
+// Full post detail, including body — only ever returned by
+// services/announcementsApi.ts:fetchPostById, which explicitly requests
+// the `content` field regardless of the list endpoint's own _fields config.
+export interface WPPost extends WPPostSummary {
+  content: { rendered: string };
 }
 
 // Cheap, text-only metadata kept for every post ever fetched — enough to

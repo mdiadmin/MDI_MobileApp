@@ -6,8 +6,14 @@ const IS_PRODUCTION = process.env.APP_VARIANT === "production";
 
 // TODO: point this at the live daruliman.org site before shipping to
 // production — this still targets the staging subsite.
+//
+// Deliberately omits `content` — the list/paged endpoint is used for
+// scrolling, and a post's full body is only ever fetched on demand when
+// it's actually opened (services/announcementsApi.ts:fetchPostById), so
+// scrolling through years of archives never downloads or holds article
+// bodies for posts that are only being browsed, not read.
 const WP_POSTS_URL =
-  "https://daruliman.org/mystaging02/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,content,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10";
+  "https://daruliman.org/mystaging02/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10";
 
 // Public key published on the masjid's own display page (portal.ad-din.ca).
 // Not a secret — kept in config instead of inline so rotation is a config

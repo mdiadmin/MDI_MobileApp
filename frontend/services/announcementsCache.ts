@@ -4,10 +4,11 @@ import {
   CACHE_IMAGES_DIR,
   MAX_CACHE_BYTES,
   MAX_CACHED_POSTS,
+  MAX_METADATA_POSTS,
   PROACTIVE_CACHE_COUNT,
   STORAGE_KEYS,
 } from '@/constants/announcementsConfig';
-import { getImageUrl } from '@/services/announcementsApi';
+import { fetchPostById, getImageUrl } from '@/services/announcementsApi';
 import { collectContentImageUrls, parseWpContent } from '@/services/htmlContent';
 import { CachedPostContent, PostMeta, WPPost } from '@/types/announcements';
 
@@ -41,16 +42,23 @@ export async function getCachedMeta(): Promise<PostMeta[] | null> {
   }
 }
 
+// Sorts newest-first and caps at MAX_METADATA_POSTS. Without this, an
+// infinite-scroll session spanning years of archives would keep growing
+// this list forever — and since it's persisted as one JSON blob, every
+// further page fetched would re-serialize a bigger blob than the last.
+function trimMeta(list: PostMeta[]): PostMeta[] {
+  return [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, MAX_METADATA_POSTS);
+}
+
 // Unions newly-fetched metadata into whatever's already cached (by id) so
 // posts from earlier pages/sessions stay browsable offline even though only
-// a bounded subset ever gets full content cached. This never removes
-// anything — use reconcileFreshMeta for the page-1 fetch, which can also
-// detect posts deleted on the server.
+// a bounded subset ever gets full content cached. This never detects
+// deletions — use reconcileFreshMeta for the page-1 fetch, which can.
 export async function mergeCachedMeta(newMeta: PostMeta[]): Promise<PostMeta[]> {
   const existing = (await getCachedMeta()) ?? [];
   const byId = new Map(existing.map((m) => [m.id, m]));
   newMeta.forEach((m) => byId.set(m.id, m));
-  const merged = Array.from(byId.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const merged = trimMeta(Array.from(byId.values()));
   try {
     await AsyncStorage.setItem(STORAGE_KEYS.meta, JSON.stringify(merged));
   } catch {
@@ -86,7 +94,7 @@ export async function reconcileFreshMeta(freshMeta: PostMeta[], coversWholeFeed:
 
   const byId = new Map(survivors.map((m) => [m.id, m]));
   freshMeta.forEach((m) => byId.set(m.id, m));
-  const merged = Array.from(byId.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const merged = trimMeta(Array.from(byId.values()));
 
   try {
     await AsyncStorage.setItem(STORAGE_KEYS.meta, JSON.stringify(merged));
@@ -298,17 +306,24 @@ export async function cacheViewedPost(post: WPPost): Promise<CachedPostContent> 
 // After a successful list fetch, proactively caches the most recent posts
 // (up to PROACTIVE_CACHE_COUNT / the overall budget) so offline reading
 // "just works" for current news without requiring the user to have opened
-// anything yet. Posts cached this way are seeded with their publish date as
-// lastViewedAt, so they naturally age out ahead of anything the user has
-// actually read.
-export async function proactivelyCacheRecent(posts: WPPost[]): Promise<void> {
+// anything yet. Takes lightweight metadata, not full posts — the list fetch
+// deliberately doesn't carry `content`, so each candidate's body is fetched
+// here individually, on demand, rather than the list ever downloading full
+// bodies for posts nobody has asked to read yet. Posts cached this way are
+// seeded with their publish date as lastViewedAt, so they naturally age out
+// ahead of anything the user has actually read.
+export async function proactivelyCacheRecent(candidates: PostMeta[]): Promise<void> {
   const manifest = await readManifest();
   const cachedIds = new Set(manifest.entries.map((e) => e.postId));
-  const candidates = posts.slice(0, PROACTIVE_CACHE_COUNT);
+  const toFetch = candidates.slice(0, PROACTIVE_CACHE_COUNT).filter((m) => !cachedIds.has(m.id));
 
-  for (const post of candidates) {
-    if (cachedIds.has(post.id)) continue;
-    await downloadAndCacheContent(post, new Date(post.date).getTime());
+  for (const meta of toFetch) {
+    try {
+      const post = await fetchPostById(meta.id);
+      await downloadAndCacheContent(post, new Date(meta.date).getTime());
+    } catch {
+      // a single post failing to fetch shouldn't block caching the rest
+    }
   }
 
   await enforceCacheBudget();
