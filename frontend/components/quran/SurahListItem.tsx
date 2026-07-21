@@ -8,30 +8,32 @@ type SurahListItemProps = {
   onPress: () => void;
 };
 
-export default function SurahListItem({ surah, onPress }: SurahListItemProps) {
-  const isMeccan = surah.revelationType === 'Meccan';
-
+function SurahListItem({ surah, onPress }: SurahListItemProps) {
   return (
     <TouchableOpacity
       onPress={onPress}
       style={[styles.card, shadows.action]}
       activeOpacity={0.85}
     >
-      <View style={[styles.numberBadge, isMeccan ? styles.meccanBadge : styles.medinanBadge]}>
+      <View style={styles.numberBadge}>
         <Text style={styles.numberText}>{surah.number}</Text>
       </View>
 
       <View style={styles.info}>
         <Text style={styles.englishName}>{surah.englishName}</Text>
         <Text style={styles.meta}>
-          {surah.englishNameTranslation} · {surah.numberOfAyahs} verses · {surah.revelationType}
+          {surah.englishNameTranslation} · {surah.numberOfAyahs} verses
         </Text>
       </View>
+
+      <View style={styles.divider} />
 
       <Text style={styles.arabicName}>{surah.name}</Text>
     </TouchableOpacity>
   );
 }
+
+export default React.memo(SurahListItem);
 
 const styles = StyleSheet.create({
   card: {
@@ -39,47 +41,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     marginBottom: 10,
-    gap: 12,
+    gap: 13,
+    borderWidth: 1,
+    borderColor: colors.hairline,
   },
   numberBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  meccanBadge: {
-    backgroundColor: colors.secondary,
-  },
-  medinanBadge: {
-    backgroundColor: colors.accentBg,
-  },
   numberText: {
     color: colors.primary,
-    fontSize: 14,
-    fontWeight: '700',
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 11,
+    fontFamily: 'DMSerifDisplay_400Regular',
   },
   info: {
     flex: 1,
+    minWidth: 0,
   },
   englishName: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: colors.foreground,
+    fontSize: 14,
+    fontFamily: 'DMSerifDisplay_400Regular',
   },
   meta: {
     color: colors.muted,
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
+    fontStyle: 'italic',
     fontFamily: 'PlusJakartaSans_400Regular',
+  },
+  divider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.hairline,
   },
   arabicName: {
     color: colors.primary,
-    fontSize: 20,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 19,
+    paddingLeft: 12,
+    fontFamily: 'Amiri_700Bold',
   },
 });

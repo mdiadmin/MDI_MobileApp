@@ -7,15 +7,17 @@ import {
   Modal,
   Image,
   ScrollView,
-  StatusBar,
   useWindowDimensions,
-  Linking
+  Linking,
+  Switch,
+  Alert
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import GeometricPattern from '@/components/GeometricPattern';
+import ArchHeader from '@/components/ArchHeader';
 import { colors } from '@/constants/theme';
-import { TERMS_AND_CONDITIONS, PRIVACY_POLICY, APP_VERSION } from '@/constants/legal';
+import { TERMS_AND_CONDITIONS, PRIVACY_POLICY, APP_VERSION, LAST_UPDATED } from '@/constants/legal';
+import { usePrayerNotifications } from '@/services/PrayerNotifications';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -23,6 +25,17 @@ export default function SettingsScreen() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const { width } = useWindowDimensions();
   const logoSize = Math.max(40, Math.round(width / 9));
+  const { enabled: notificationsEnabled, busy: notificationsBusy, toggle: toggleNotifications } = usePrayerNotifications();
+
+  const handleToggleNotifications = async (value: boolean) => {
+    const result = await toggleNotifications(value);
+    if (value && !result) {
+      Alert.alert(
+        'Notifications Disabled',
+        'Prayer time reminders need notification permission. Enable it for this app in your device Settings.'
+      );
+    }
+  };
 
   // Handler to open the website securely
   const handleOpenWebsite = async () => {
@@ -41,22 +54,31 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar animated translucent backgroundColor="transparent" barStyle="light-content" />
-      
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <GeometricPattern opacity={0.08} />
-        <View style={styles.headerContent}>
-          <View style={styles.headerSubtitleRow}>
-            <MaterialCommunityIcons name="cog-outline" size={18} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.headerSubtitle}>Preferences & Legal</Text>
-          </View>
-          <Text style={styles.headerTitle}>Settings</Text>
-        </View>
-      </View>
+      <ArchHeader title="Settings" eyebrow="Preferences & Legal" icon="cog-outline" />
 
       {/* Settings Content */}
       <View style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+
+          <View style={styles.row}>
+            <View style={styles.iconWrap}>
+              <MaterialCommunityIcons name="bell-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowTitle}>Prayer Time Reminders</Text>
+              <Text style={styles.rowDescription}>Get notified at each prayer time</Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleToggleNotifications}
+              disabled={notificationsBusy}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
           
@@ -70,7 +92,7 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowTitle}>Terms & Conditions</Text>
-              <Text style={styles.rowDescription}>Usage terms for this app</Text>
+              <Text style={styles.rowDescription}>Updated {LAST_UPDATED}</Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
           </TouchableOpacity>
@@ -85,7 +107,7 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowTitle}>Privacy Policy</Text>
-              <Text style={styles.rowDescription}>How we handle your data</Text>
+              <Text style={styles.rowDescription}>Updated {LAST_UPDATED}</Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
           </TouchableOpacity>
@@ -178,35 +200,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: colors.primary,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-  },
-  headerContent: {
-    zIndex: 10,
-  },
-  headerSubtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 26,
-    lineHeight: 32,
-    fontFamily: 'DMSerifDisplay_400Regular',
   },
   content: {
     flex: 1,

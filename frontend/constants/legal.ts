@@ -2,11 +2,13 @@ export const APP_NAME = 'Masjid Darul Iman';
 export const APP_VERSION = '1.0.0';
 export const ORGANIZATION_NAME = 'Masjid Darul Iman';
 export const WEBSITE_URL = 'https://daruliman.org';
+export const PRAYER_TIMES_PROVIDER_URL = 'https://portal.ad-din.ca';
+export const LAST_UPDATED = 'July 20, 2026';
 
 export const TERMS_AND_CONDITIONS = `
 TERMS AND CONDITIONS
 
-Last Updated: July 2026
+Last Updated: ${LAST_UPDATED}
 
 1. ACCEPTANCE OF TERMS
 
@@ -15,10 +17,11 @@ By downloading, installing, or using the ${APP_NAME} mobile application (the "Ap
 2. ABOUT THE APP
 
 The ${APP_NAME} App is a free mobile application provided by ${ORGANIZATION_NAME} for the benefit of our community. The App provides the following features:
-  • Prayer time display based on your geographic location (data provided by aladhan.com)
+  • Prayer time display and reminders based on the masjid's schedule (data provided by ${PRAYER_TIMES_PROVIDER_URL})
   • Qibla direction finder using your device's compass and location sensors
   • Quran reading (data provided by alquran.cloud)
   • Announcements and community updates from ${WEBSITE_URL}
+  • Push notifications, delivered via OneSignal
   • Links to external donation pages
 
 3. USE OF THE APP
@@ -28,9 +31,10 @@ You agree to use the App only for lawful purposes and in a manner consistent wit
 4. THIRD-PARTY SERVICES
 
 The App relies on third-party services and APIs, including but not limited to:
-  • Aladhan.com API for prayer time data
+  • ${PRAYER_TIMES_PROVIDER_URL} for prayer time data
   • Alquran.cloud API for Quran text
   • WordPress REST API from ${WEBSITE_URL} for announcements
+  • OneSignal for delivering push notifications
 
 ${ORGANIZATION_NAME} is not responsible for the availability, accuracy, or content of these third-party services. Interruptions or errors in these services may affect the functionality of the App.
 
@@ -70,7 +74,7 @@ If you have any questions about these Terms, please contact us at ${WEBSITE_URL}
 export const PRIVACY_POLICY = `
 PRIVACY POLICY
 
-Last Updated: July 2026
+Last Updated: ${LAST_UPDATED}
 
 1. INTRODUCTION
 
@@ -79,32 +83,37 @@ ${ORGANIZATION_NAME} ("we," "us," or "our") respects your privacy. This Privacy 
 2. INFORMATION WE DO NOT COLLECT
 
 We do NOT collect, store, or share:
-  • Personal identification information (name, email, phone number, etc.)
+  • Your name, email address, or phone number (unless you separately contact us)
   • User account credentials or login data
   • Payment or financial information
-  • Browsing history or app usage analytics
   • Photos, contacts, or messages from your device
 
-3. INFORMATION WE ACCESS
-
-The App accesses the following device information solely to provide core functionality:
+3. INFORMATION WE ACCESS AND COLLECT
 
 Location Data:
-  • Your approximate or precise location is used to calculate accurate prayer times for your area and to determine the Qibla direction.
-  • Location data is processed locally on your device and is not transmitted to or stored by ${ORGANIZATION_NAME}.
+  • Your approximate or precise location is used to determine the Qibla direction and, where relevant, to tailor prayer-time information to your area.
+  • Location data is processed on your device and is not transmitted to or stored on ${ORGANIZATION_NAME}'s own servers.
 
 Device Sensors:
-  • Compass and accelerometer sensors are accessed to display the Qibla direction.
+  • Compass, accelerometer, and gyroscope sensors are accessed to display the Qibla direction.
   • Sensor data is processed in real-time on your device and is not stored or transmitted.
+
+Push Notification Data:
+  • If you enable notifications, a device push token and basic device information (device model, operating system version, app version, language, and an IP-derived approximate country/timezone) are collected by our notification provider, OneSignal, so that prayer-time reminders and masjid announcements can be delivered to your device.
+  • This information is used only to deliver and measure delivery of notifications sent by ${ORGANIZATION_NAME}. See Section 4 for details on OneSignal.
 
 4. THIRD-PARTY SERVICES
 
 The App communicates with the following third-party services:
 
-Aladhan.com API:
-  • Used to fetch prayer time data.
-  • Your location coordinates may be sent to this API to retrieve accurate prayer times.
-  • Privacy policy: https://aladhan.com
+OneSignal (push notifications):
+  • Used to deliver prayer-time reminders and announcement notifications.
+  • Collects a device push token, device/OS information, app usage and engagement events (e.g. whether a notification was opened), and an IP-derived approximate location, as described above.
+  • Privacy policy: https://onesignal.com/privacy_policy
+
+${PRAYER_TIMES_PROVIDER_URL} (ad-din masjid portal):
+  • Used to fetch the masjid's daily prayer times.
+  • No personal data is sent to this service beyond a standard network request (which includes your IP address, as with any web request).
 
 Alquran.cloud API:
   • Used to fetch Quran text and translations.
@@ -113,21 +122,22 @@ Alquran.cloud API:
 
 ${WEBSITE_URL} (WordPress):
   • Used to fetch community announcements and posts.
-  • Standard web server logs may record your IP address as per WordPress.com policies.
+  • Standard web server logs may record your IP address as per WordPress's own policies.
   • Privacy policy: ${WEBSITE_URL}
 
 Donation Platforms:
-  • The App may link to external donation pages.
-  • We do not process or store any payment information.
+  • The App links out to external donation pages using your device's browser, outside the App.
+  • We do not process or store any payment information, and no donation-page data passes through the App itself.
   • Please review the privacy policy of the respective donation platform before contributing.
 
 5. DATA STORAGE
 
 The App stores the following data locally on your device:
   • Your acceptance of the Terms and Conditions and Privacy Policy
-  • App preferences and settings (if any)
+  • App preferences and settings (e.g. whether prayer notifications are enabled)
+  • A cached copy of prayer times, to allow the App to work offline
 
-This data is stored using your device's local storage and is not transmitted to any external server.
+This data is stored using your device's local storage. The push token described in Section 3 is the only identifier transmitted off-device by the App itself, and it is used solely for the purpose of delivering notifications.
 
 6. CHILDREN'S PRIVACY
 
@@ -141,6 +151,7 @@ Since we do not collect or store personal information on our servers, there is m
 
 You have the right to:
   • Deny location or sensor permissions at any time through your device settings
+  • Disable push notifications at any time from the App's Settings tab or your device's notification settings, which stops the App from sending your push token further notifications
   • Uninstall the App at any time
   • Request information about how your data is handled
 

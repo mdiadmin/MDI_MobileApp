@@ -7,6 +7,16 @@ export function formatDateLong(date: Date) {
   });
 }
 
+// Drops the year — used where the Hijri date sits right alongside it and
+// repeating the year twice (Gregorian + Hijri) would be redundant.
+export function formatDateShort(date: Date) {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 export function getHijriDate(date: Date) {
   try {
     return new Intl.DateTimeFormat('en-TN-u-ca-islamic', {

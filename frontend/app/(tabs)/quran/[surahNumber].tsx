@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ScrollView, View, Text, StyleSheet } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { FlatList, View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import ScreenHeader from '@/components/ScreenHeader';
+import ArchHeader from '@/components/ArchHeader';
 import AyahCard from '@/components/quran/AyahCard';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
@@ -9,11 +9,20 @@ import { getSurah } from '@/services/quranApi';
 import { Ayah } from '@/types/quran';
 import { colors, shadows } from '@/constants/theme';
 
+type AyahPair = { arabic: Ayah; translation?: Ayah };
+
+function renderAyahPair({ item }: { item: AyahPair }) {
+  return <AyahCard arabic={item.arabic} translation={item.translation} />;
+}
+
+function keyExtractor(item: AyahPair) {
+  return item.arabic.number.toString();
+}
+
 export default function SurahDetailScreen() {
   const { surahNumber } = useLocalSearchParams<{ surahNumber: string }>();
   const router = useRouter();
-  const [arabicAyahs, setArabicAyahs] = useState<Ayah[]>([]);
-  const [translationAyahs, setTranslationAyahs] = useState<Ayah[]>([]);
+  const [ayahPairs, setAyahPairs] = useState<AyahPair[]>([]);
   const [surahMeta, setSurahMeta] = useState<{
     englishName: string;
     englishNameTranslation: string;
@@ -29,8 +38,12 @@ export default function SurahDetailScreen() {
 
     getSurah(surahNumber)
       .then(([arabicData, translationData]) => {
-        setArabicAyahs(arabicData.ayahs);
-        setTranslationAyahs(translationData.ayahs);
+        setAyahPairs(
+          arabicData.ayahs.map((arabic, i) => ({
+            arabic,
+            translation: translationData.ayahs[i],
+          }))
+        );
         setSurahMeta({
           englishName: arabicData.englishName,
           englishNameTranslation: arabicData.englishNameTranslation,
@@ -43,6 +56,8 @@ export default function SurahDetailScreen() {
       .finally(() => setLoading(false));
   }, [surahNumber]);
 
+  const handleBack = useCallback(() => router.back(), [router]);
+
   if (loading) {
     return <LoadingState message="Loading surah..." />;
   }
@@ -53,11 +68,11 @@ export default function SurahDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader
+      <ArchHeader
         title={surahMeta.englishName}
         subtitle={`${surahMeta.name} · ${surahMeta.revelationType}`}
         showBack
-        onBack={() => router.push('/quran')}
+        onBack={handleBack}
       />
 
       <View style={[styles.infoCard, shadows.card]}>
@@ -71,18 +86,17 @@ export default function SurahDetailScreen() {
         </View>
       </View>
 
-      <ScrollView
+      <FlatList
+        data={ayahPairs}
+        keyExtractor={keyExtractor}
+        renderItem={renderAyahPair}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-      >
-        {arabicAyahs.map((ayah, i) => (
-          <AyahCard
-            key={ayah.number}
-            arabic={ayah}
-            translation={translationAyahs[i]}
-          />
-        ))}
-      </ScrollView>
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
+      />
     </View>
   );
 }
@@ -103,6 +117,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 20,
+    borderWidth: 1,
+    borderColor: colors.hairline,
   },
   infoBlock: {
     flex: 1,

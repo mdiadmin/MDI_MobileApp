@@ -1,309 +1,96 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
-import { colors, shadows } from '@/constants/theme';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { colors } from '@/constants/theme';
+import SectionDots from '@/components/SectionDots';
+import {
+  Prayer,
+  formatTime,
+  sortForDisplay,
+  getNextPrayerName,
+} from '@/services/prayerTimes';
 
-const PRAYER_TIMES_URL = 'https://portal.ad-din.ca/public/mediumdisplay/542';
-const INITIAL_WIDGET_HEIGHT = 320; // Fallback height while loading
+type PrayerTimesWidgetProps = {
+  prayers: Prayer[] | null;
+  error: boolean;
+  now: Date;
+};
 
-const buildInjectedCss = () => `
-  * {
-    box-sizing: border-box;
-  }
+const DOT_COL_WIDTH = 28;
 
-  html, body {
-    background-color: transparent !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-    margin: 0;
-    padding: 0;
-    color: ${colors.foreground} !important;
-    overflow: hidden !important;
-  }
-
-  body {
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  .head-part,
-  .content {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .datetime, .head-part {
-    display: none !important;
-  }
-
-  .table {
-    width: 100% !important;
-    background-color: ${colors.card} !important;
-    border-radius: 16px !important;
-    overflow: hidden !important;
-    border: 1px solid rgba(27, 94, 56, 0.08) !important;
-    box-shadow: 0 16px 40px rgba(27, 94, 56, 0.08) !important;
-  }
-
-  .tr {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding: 14px 16px !important;
-    gap: 12px !important;
-    border-bottom: 1px solid rgba(27, 94, 56, 0.08) !important;
-    background-color: ${colors.card} !important;
-  }
-
-  .tr:last-child {
-    border-bottom: none !important;
-  }
-
-  .tr:not(.trfirst) {
-    background-color: rgba(232, 242, 236, 0.4) !important;
-    color: #1A2E1E !important;
-    font-size: 15px !important;
-    font-weight: 600 !important;
-  }
-
-  .tr:not(.trfirst):nth-of-type(even) {
-    background-color: #FFFFFF !important;
-  }
-
-  .tr.trfirst {
-    background-color: rgba(27, 94, 56, 0.04) !important;
-    padding: 12px 16px !important;
-  }
-
-  .tr.trfirst .th,
-  .tr.trfirst .thfirst {
-    color: #9AB5A4 !important;
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-  }
-
-  .tr.trfirst .thfirst {
-    flex: 1 1 45% !important;
-    text-align: left !important;
-  }
-
-  .tr.trfirst .th {
-    flex: 0 0 24% !important;
-    text-align: right !important;
-  }
-
-  .tr:not(.trfirst) .tdfirst {
-    flex: 1 1 45% !important;
-    text-align: left !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 4px !important;
-    padding-right: 4px !important;
-    color: #1A2E1E !important;
-  }
-
-  .tr:not(.trfirst) .td,
-  .tr:not(.trfirst) .tdlast {
-    flex: 0 0 24% !important;
-    text-align: right !important;
-  }
-
-  .tr:not(.trfirst) .td {
-    color: #4A7A5E !important;
-  }
-
-  .tr:not(.trfirst) .tdlast {
-    font-weight: 700 !important;
-    color: #1B5E38 !important;
-  }
-
-  .tr:not(.trfirst) .smal,
-  .tr:not(.trfirst) .tdfirst span,
-  .tr:not(.trfirst) .tdfirst .smal {
-    color: #9AB5A4 !important;
-    font-size: 12px !important;
-    font-weight: 500 !important;
-    line-height: 1.3 !important;
-  }
-
-  .tr:not(.trfirst) .tdfirst p {
-    margin: 0 !important;
-    font-size: 15px !important;
-    font-weight: 700 !important;
-    color: ${colors.foreground} !important;
-  }
-
-  .table .tr.highlight,
-  .tr.highlight:not(.trfirst) {
-    background-color: #1B5E38 !important;
-  }
-
-  .tr.highlight .tdfirst p {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-  }
-  
-  .tr.highlight .td p {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-  }
-    
-  .tr.highlight .tdlast p {
-    color: #C9933A !important;
-    font-weight: 700 !important;
-  }
-
-  .smal:not(.tdfirst):not(.td):not(.tdlast) {
-    display: none !important;
-  }
-
-  .footer, .footer *, .footer img,
-  .tr img, .th img, .masjid-icon, .masjid-icon img {
-    display: none !important;
-  }
-
-  .tr:has(marquee) {
-    display: block !important;
-    width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr:has(marquee) .td,
-  .td:has(marquee) {
-    flex: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr:has(marquee) span {
-    display: block !important;
-    width: 100% !important;
-  }
-
-  /* Fallback path for older WebViews without :has() support. */
-  .tr.ticker-row {
-    display: block !important;
-    width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr.ticker-row .td,
-  .td.ticker-cell {
-    flex: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .tr.ticker-row span {
-    display: block !important;
-    width: 100% !important;
-  }
-
-  .td marquee,
-  marquee {
-    display: block !important;
-    width: 100% !important;
-    min-width: 100% !important;
-    margin: 0 !important;
-    padding: 10px 20px !important;
-    overflow: hidden !important;
-    color: #FF0000 !important;
-    box-sizing: border-box !important;
+function TimelineTrack() {
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+      <Defs>
+        <LinearGradient id="timelineTrack" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={colors.accent} stopOpacity={0.55} />
+          <Stop offset="1" stopColor={colors.primary} stopOpacity={0.12} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={DOT_COL_WIDTH / 2 - 1} y="6" width="2" height="94%" fill="url(#timelineTrack)" />
+    </Svg>
+  );
 }
 
-
-`;
-
-export default function PrayerTimesWidget() {
-  const webviewRef = useRef<React.ComponentRef<typeof WebView> | null>(null);
-  const [realHeight, setRealHeight] = useState(INITIAL_WIDGET_HEIGHT);
-  const [cacheBuster] = useState(() => Date.now());
-
-  const injectedJs = `
-    (function() {
-      function injectStyle() {
-        var existing = document.getElementById('__app_injected_style__');
-        if (existing) existing.remove();
-        var style = document.createElement('style');
-        style.id = '__app_injected_style__';
-        style.innerHTML = ${JSON.stringify(buildInjectedCss())};
-        document.head.appendChild(style);
-      }
-
-      function tagTickerRow() {
-        var marquees = document.querySelectorAll('marquee');
-        marquees.forEach(function(m) {
-          var cell = m.closest('.td');
-          var row = m.closest('.tr');
-          if (cell) cell.classList.add('ticker-cell');
-          if (row) row.classList.add('ticker-row');
-        });
-      }
-
-      function sendHeight() {
-        var height = document.documentElement.scrollHeight || document.body.scrollHeight;
-        window.ReactNativeWebView.postMessage(JSON.stringify({ height: height }));
-      }
-
-      injectStyle();
-      tagTickerRow();
-      sendHeight();
-
-      var observer = new MutationObserver(function() {
-        if (!document.getElementById('__app_injected_style__')) {
-          injectStyle();
-        }
-        tagTickerRow();
-        sendHeight();
-      });
-
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      setTimeout(function() {
-        observer.disconnect();
-      }, 8000);
-    })();
-    true;
-  `;
-
-  const handleMessage = (event: WebViewMessageEvent) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.height) {
-        setRealHeight(data.height);
-      }
-    } catch (e) {
-      
-    }
-  };
+export default function PrayerTimesWidget({ prayers, error, now }: PrayerTimesWidgetProps) {
+  const rows = useMemo(() => (prayers ? sortForDisplay(prayers) : []), [prayers]);
+  const nextPrayer = useMemo(() => (rows.length ? getNextPrayerName(rows, now) : null), [rows, now]);
 
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Prayer Times</Text>
+        <SectionDots />
       </View>
 
-      <View style={[styles.card, shadows.widget]}>
-        <WebView
-          ref={webviewRef}
-          source={{ uri: `${PRAYER_TIMES_URL}?_=${cacheBuster}` }}
-          style={[styles.webview, { height: realHeight }]} 
-          scrollEnabled={false}
-          bounces={false}
-          javaScriptEnabled
-          domStorageEnabled
-          cacheEnabled={false}
-          injectedJavaScript={injectedJs}
-          onMessage={handleMessage}
-          onLoadEnd={() => {
-            webviewRef.current?.injectJavaScript(injectedJs);
-          }}
-        />
+      <View style={styles.timeline}>
+        {prayers == null && !error && (
+          <View style={styles.statusRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+
+        {error && (
+          <View style={styles.statusRow}>
+            <MaterialCommunityIcons name="wifi-off" size={20} color={colors.muted} />
+            <Text style={styles.statusText}>Couldn't load prayer times</Text>
+          </View>
+        )}
+
+        {rows.length > 0 && <TimelineTrack />}
+
+        {rows.length > 0 && (
+          <View style={styles.labelRow}>
+            <View style={{ width: DOT_COL_WIDTH }} />
+            <View style={styles.labelTimes}>
+              <Text style={styles.labelText}>Adhan</Text>
+              <Text style={styles.labelText}>Iqamah</Text>
+            </View>
+          </View>
+        )}
+
+        {rows.map((prayer) => {
+          const isNext = prayer.prayerName === nextPrayer;
+          return (
+            <View key={prayer.prayerName} style={styles.row}>
+              <View style={styles.dotCol}>
+                <View style={[styles.dot, isNext && styles.dotNext]} />
+              </View>
+              <View style={[styles.card, styles.cardShadow, isNext && styles.cardNext]}>
+                <Text style={[styles.name, isNext && styles.nameNext]}>{prayer.prayerName}</Text>
+                <View style={styles.times}>
+                  <Text style={[styles.adhan, isNext && styles.adhanNext]}>
+                    {prayer.prayerAdhan ? formatTime(prayer.prayerAdhan) : ''}
+                  </Text>
+                  <Text style={[styles.iqamah, isNext && styles.iqamahNext]}>
+                    {prayer.prayerIqamah ? formatTime(prayer.prayerIqamah) : ''}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -312,26 +99,142 @@ export default function PrayerTimesWidget() {
 const styles = StyleSheet.create({
   section: {
     marginHorizontal: 16,
-    marginVertical: 12,
+    marginTop: 20,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    gap: 10,
+    marginBottom: 14,
   },
   title: {
-    fontSize: 18,
+    fontSize: 19,
     color: colors.primary,
     fontFamily: 'DMSerifDisplay_400Regular',
   },
-  card: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: colors.card,
+  timeline: {
+    position: 'relative',
+    paddingLeft: 2,
   },
-  webview: {
-    width: '100%',
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 24,
+  },
+  statusText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontFamily: 'PlusJakartaSans_400Regular',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 6,
+  },
+  labelTimes: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+    paddingHorizontal: 14,
+  },
+  labelText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    width: 56,
+    textAlign: 'right',
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 6,
+  },
+  dotCol: {
+    width: DOT_COL_WIDTH,
+    alignItems: 'center',
+  },
+  dot: {
+    width: 14,
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    borderWidth: 3,
+    borderColor: colors.primary,
+  },
+  dotNext: {
+    width: 18,
+    height: 18,
+    backgroundColor: colors.accent,
+    borderColor: '#fff',
+    borderWidth: 3,
+  },
+  card: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
     backgroundColor: colors.card,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  cardShadow: {
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  cardNext: {
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  name: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.foreground,
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  nameNext: {
+    color: '#fff',
+  },
+  times: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  adhan: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primaryLight,
+    width: 56,
+    textAlign: 'right',
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+  },
+  adhanNext: {
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '700',
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  iqamah: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    width: 56,
+    textAlign: 'right',
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  iqamahNext: {
+    color: colors.accent,
   },
 });
