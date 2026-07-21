@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ActivityIndicator,
   Dimensions,
@@ -590,7 +591,16 @@ export default function QiblaFinder() {
   const beamLength = halfCompass - 10;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screenBg}>
+      <Image
+        source={require("../../assets/images/pattern.png")}
+        style={StyleSheet.absoluteFill}
+        resizeMode="repeat"
+      />
+      <View style={styles.domeApexDot} />
+
+      <View style={styles.dome}>
+      <View style={styles.container}>
       {interference && (
         <View style={styles.interferenceBanner}>
           <Text style={styles.interferenceText}>
@@ -681,11 +691,38 @@ export default function QiblaFinder() {
       <Text style={styles.bearingText}>
         Qibla: {qiblaAngle.toFixed(0)}°
       </Text>
+      </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenBg: {
+    flex: 1,
+    backgroundColor: "#BD8B34",
+  },
+  domeApexDot: {
+    position: "absolute",
+    top: 3,
+    left: "50%",
+    marginLeft: -3.5,
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+    opacity: 0.9,
+    zIndex: 2,
+  },
+  dome: {
+    flex: 1,
+    marginTop: 20,
+    borderTopLeftRadius: 210,
+    borderTopRightRadius: 210,
+    borderWidth: 4,
+    borderColor: "#C9933A",
+    overflow: "hidden",
+  },
   container: {
     flex: 1,
     backgroundColor: "#0D3B2E",

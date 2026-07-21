@@ -7,7 +7,7 @@ const IS_PRODUCTION = process.env.APP_VARIANT === "production";
 // TODO: point this at the live daruliman.org site before shipping to
 // production — this still targets the staging subsite.
 const WP_POSTS_URL =
-  "https://daruliman.org/mystaging02/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10";
+  "https://daruliman.org/mystaging02/wp-json/wp/v2/posts?_fields=id,date,link,title,excerpt,content,category_info,_links,_embedded&_embed=wp:featuredmedia&per_page=10";
 
 // Public key published on the masjid's own display page (portal.ad-din.ca).
 // Not a secret — kept in config instead of inline so rotation is a config
@@ -23,9 +23,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: "portrait",
   scheme: "frontend",
   userInterfaceStyle: "automatic",
-  icon: "./assets/images/MDI_logo2.png",
+  icon: "./assets/images/MDI_logo_no_background.png",
   ios: {
-    icon: "./assets/images/MDI_logo2.png",
+    icon: "./assets/images/MDI_logo_no_background.png",
     bundleIdentifier: "com.mdi-admin.mdimobileapp",
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
@@ -37,7 +37,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/MDI_logo2.png",
+      foregroundImage: "./assets/images/MDI_logo_no_background.png",
     },
     predictiveBackGestureEnabled: false,
     package: "com.mdiadminsorganization.mdimobileapp",
@@ -51,8 +51,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#000000",
-        image: "./assets/images/MDI_logo2.png",
+        backgroundColor: "#FFFFFF",
+        image: "./assets/images/MDI_logo_no_background.png",
         imageWidth: 180,
         resizeMode: "contain",
       },

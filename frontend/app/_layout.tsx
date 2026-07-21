@@ -10,6 +10,10 @@ import {
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
 } from "@expo-google-fonts/plus-jakarta-sans";
+import {
+  Amiri_400Regular,
+  Amiri_700Bold,
+} from "@expo-google-fonts/amiri";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState, useCallback } from "react";
 import {
@@ -337,6 +341,8 @@ export default function RootLayout() {
     PlusJakartaSans_400Regular,
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
+    Amiri_400Regular,
+    Amiri_700Bold,
   });
 
   const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);

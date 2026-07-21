@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { FlatList, View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import ScreenHeader from '@/components/ScreenHeader';
+import ArchHeader from '@/components/ArchHeader';
 import AyahCard from '@/components/quran/AyahCard';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
@@ -68,7 +68,7 @@ export default function SurahDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader
+      <ArchHeader
         title={surahMeta.englishName}
         subtitle={`${surahMeta.name} · ${surahMeta.revelationType}`}
         showBack
@@ -117,6 +117,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 20,
+    borderWidth: 1,
+    borderColor: colors.hairline,
   },
   infoBlock: {
     flex: 1,

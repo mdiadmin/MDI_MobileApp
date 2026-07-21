@@ -3,6 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ayah } from '@/types/quran';
 import { colors, shadows } from '@/constants/theme';
 
+const CARD_BORDER = 'rgba(201,147,58,0.2)';
+
 type AyahCardProps = {
   arabic: Ayah;
   translation?: Ayah;
@@ -34,27 +36,32 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
   },
   ayahBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.accentBg,
+    width: 28,
+    height: 28,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
   ayahNumber: {
-    color: colors.accent,
+    color: colors.primary,
     fontSize: 11,
-    fontWeight: '700',
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'DMSerifDisplay_400Regular',
   },
   arabicText: {
-    fontSize: 22,
-    lineHeight: 42,
+    fontSize: 23,
+    lineHeight: 44,
     textAlign: 'right',
     color: colors.foreground,
     writingDirection: 'rtl',
+    fontFamily: 'Amiri_700Bold',
   },
   translationText: {
     fontSize: 14,
@@ -63,7 +70,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: CARD_BORDER,
     fontFamily: 'PlusJakartaSans_400Regular',
   },
 });

@@ -7,7 +7,6 @@ import {
   Modal,
   Image,
   ScrollView,
-  StatusBar,
   useWindowDimensions,
   Linking,
   Switch,
@@ -15,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import GeometricPattern from '@/components/GeometricPattern';
+import ArchHeader from '@/components/ArchHeader';
 import { colors } from '@/constants/theme';
 import { TERMS_AND_CONDITIONS, PRIVACY_POLICY, APP_VERSION, LAST_UPDATED } from '@/constants/legal';
 import { usePrayerNotifications } from '@/services/PrayerNotifications';
@@ -55,19 +54,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar animated translucent backgroundColor="transparent" barStyle="light-content" />
-      
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <GeometricPattern opacity={0.08} />
-        <View style={styles.headerContent}>
-          <View style={styles.headerSubtitleRow}>
-            <MaterialCommunityIcons name="cog-outline" size={18} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.headerSubtitle}>Preferences & Legal</Text>
-          </View>
-          <Text style={styles.headerTitle}>Settings</Text>
-        </View>
-      </View>
+      <ArchHeader title="Settings" eyebrow="Preferences & Legal" icon="cog-outline" />
 
       {/* Settings Content */}
       <View style={styles.content}>
@@ -213,35 +200,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: colors.primary,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-  },
-  headerContent: {
-    zIndex: 10,
-  },
-  headerSubtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 26,
-    lineHeight: 32,
-    fontFamily: 'DMSerifDisplay_400Regular',
   },
   content: {
     flex: 1,

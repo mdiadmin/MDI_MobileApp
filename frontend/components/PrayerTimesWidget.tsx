@@ -1,71 +1,50 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { colors } from '@/constants/theme';
+import SectionDots from '@/components/SectionDots';
 import {
   Prayer,
-  combineDateTime,
   formatTime,
-  getCachedPrayerTimes,
-  getPrayerTimes,
+  sortForDisplay,
+  getNextPrayerName,
 } from '@/services/prayerTimes';
 
-// Order (and inclusion) of rows shown in the widget — a superset of the five
-// prayers the notification scheduler cares about, matching what a masjid
-// display board typically shows.
-const DISPLAY_ORDER = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha', 'Jumah'];
+type PrayerTimesWidgetProps = {
+  prayers: Prayer[] | null;
+  error: boolean;
+  now: Date;
+};
 
-function sortForDisplay(prayers: Prayer[]): Prayer[] {
-  return prayers
-    .filter((p) => DISPLAY_ORDER.includes(p.prayerName))
-    .sort((a, b) => DISPLAY_ORDER.indexOf(a.prayerName) - DISPLAY_ORDER.indexOf(b.prayerName));
+const DOT_COL_WIDTH = 28;
+
+function TimelineTrack() {
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+      <Defs>
+        <LinearGradient id="timelineTrack" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={colors.accent} stopOpacity={0.55} />
+          <Stop offset="1" stopColor={colors.primary} stopOpacity={0.12} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={DOT_COL_WIDTH / 2 - 1} y="6" width="2" height="94%" fill="url(#timelineTrack)" />
+    </Svg>
+  );
 }
 
-function getNextPrayerName(prayers: Prayer[], now: Date): string | null {
-  for (const p of prayers) {
-    const time = p.prayerAdhan ?? p.prayerBegins;
-    if (!time) continue;
-    if (combineDateTime(now, time).getTime() > now.getTime()) {
-      return p.prayerName;
-    }
-  }
-  return null;
-}
-
-export default function PrayerTimesWidget() {
-  const [prayers, setPrayers] = useState<Prayer[] | null>(null);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async () => {
-    const today = new Date();
-
-    // Paint instantly from whatever's cached (no network), then refresh.
-    const cached = await getCachedPrayerTimes(today);
-    if (cached) setPrayers(cached);
-
-    try {
-      const fresh = await getPrayerTimes(today);
-      setPrayers(fresh);
-      setError(false);
-    } catch {
-      if (!cached) setError(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
+export default function PrayerTimesWidget({ prayers, error, now }: PrayerTimesWidgetProps) {
   const rows = useMemo(() => (prayers ? sortForDisplay(prayers) : []), [prayers]);
-  const nextPrayer = useMemo(() => (prayers ? getNextPrayerName(rows, new Date()) : null), [prayers, rows]);
+  const nextPrayer = useMemo(() => (rows.length ? getNextPrayerName(rows, now) : null), [rows, now]);
 
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Prayer Times</Text>
+        <SectionDots />
       </View>
 
-      <View style={[styles.card, styles.cardShadow]}>
+      <View style={styles.timeline}>
         {prayers == null && !error && (
           <View style={styles.statusRow}>
             <ActivityIndicator size="small" color={colors.primary} />
@@ -79,48 +58,36 @@ export default function PrayerTimesWidget() {
           </View>
         )}
 
+        {rows.length > 0 && <TimelineTrack />}
+
         {rows.length > 0 && (
-          <View style={[styles.row, styles.labelRow]}>
-            <Text style={[styles.labelText, styles.colName]}>Prayer</Text>
-            <Text style={[styles.labelText, styles.colTime]}>Adhan</Text>
-            <Text style={[styles.labelText, styles.colTime]}>Iqamah</Text>
+          <View style={styles.labelRow}>
+            <View style={{ width: DOT_COL_WIDTH }} />
+            <View style={styles.labelTimes}>
+              <Text style={styles.labelText}>Adhan</Text>
+              <Text style={styles.labelText}>Iqamah</Text>
+            </View>
           </View>
         )}
 
-        {rows.map((prayer, index) => {
+        {rows.map((prayer) => {
           const isNext = prayer.prayerName === nextPrayer;
-          const isLast = index === rows.length - 1;
-          // Mirrors the original CSS's `.tr:not(.trfirst):nth-of-type(even)`
-          // rule: nth-of-type counts the header row too, so the first data
-          // row (2nd <tr> overall) is the "even" one and gets the white
-          // background; the tinted background is the default for odd rows.
-          const isTinted = index % 2 === 1;
           return (
-            <View
-              key={prayer.prayerName}
-              style={[
-                styles.row,
-                isTinted ? styles.rowTinted : styles.rowWhite,
-                isLast && styles.rowLast,
-                isNext && styles.rowHighlight,
-              ]}
-            >
-              <Text style={[styles.rowName, styles.colName, isNext && styles.rowTextHighlight]}>
-                {prayer.prayerName}
-              </Text>
-              <Text
-                style={[
-                  styles.rowTime,
-                  styles.colTime,
-                  isNext && styles.rowTextHighlight,
-                  isNext && styles.rowTimeHighlightWeight,
-                ]}
-              >
-                {prayer.prayerAdhan ? formatTime(prayer.prayerAdhan) : ''}
-              </Text>
-              <Text style={[styles.rowIqamah, styles.colTime, isNext && styles.rowIqamahHighlight]}>
-                {prayer.prayerIqamah ? formatTime(prayer.prayerIqamah) : ''}
-              </Text>
+            <View key={prayer.prayerName} style={styles.row}>
+              <View style={styles.dotCol}>
+                <View style={[styles.dot, isNext && styles.dotNext]} />
+              </View>
+              <View style={[styles.card, styles.cardShadow, isNext && styles.cardNext]}>
+                <Text style={[styles.name, isNext && styles.nameNext]}>{prayer.prayerName}</Text>
+                <View style={styles.times}>
+                  <Text style={[styles.adhan, isNext && styles.adhanNext]}>
+                    {prayer.prayerAdhan ? formatTime(prayer.prayerAdhan) : ''}
+                  </Text>
+                  <Text style={[styles.iqamah, isNext && styles.iqamahNext]}>
+                    {prayer.prayerIqamah ? formatTime(prayer.prayerIqamah) : ''}
+                  </Text>
+                </View>
+              </View>
             </View>
           );
         })}
@@ -132,34 +99,22 @@ export default function PrayerTimesWidget() {
 const styles = StyleSheet.create({
   section: {
     marginHorizontal: 16,
-    marginVertical: 12,
+    marginTop: 20,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    gap: 10,
+    marginBottom: 14,
   },
   title: {
-    fontSize: 18,
+    fontSize: 19,
     color: colors.primary,
     fontFamily: 'DMSerifDisplay_400Regular',
   },
-  card: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: 'rgba(27, 94, 56, 0.08)',
-  },
-  // Replicates the injected CSS's `box-shadow: 0 16px 40px rgba(27,94,56,0.08)`
-  // exactly, rather than reusing the app's generic `shadows.widget`.
-  cardShadow: {
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.08,
-    shadowRadius: 40,
-    elevation: 8,
+  timeline: {
+    position: 'relative',
+    paddingLeft: 2,
   },
   statusRow: {
     flexDirection: 'row',
@@ -173,93 +128,113 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'PlusJakartaSans_400Regular',
   },
-  // Mirrors `.thfirst`/`.tdfirst { flex: 1 1 45% }`.
-  colName: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: '45%',
-    textAlign: 'left',
-  },
-  // Mirrors `.th`/`.td`/`.tdlast { flex: 0 0 24% }`.
-  colTime: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flexBasis: '24%',
-    textAlign: 'right',
-  },
-  // Mirrors the base `.tr` rule shared by the header and data rows.
-  row: {
+  labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(27, 94, 56, 0.08)',
-    backgroundColor: colors.card,
+    paddingBottom: 6,
   },
-  // `.tr.trfirst` overrides the base row's padding and background.
-  labelRow: {
-    paddingVertical: 12,
-    backgroundColor: 'rgba(27, 94, 56, 0.04)',
+  labelTimes: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+    paddingHorizontal: 14,
   },
   labelText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '700',
     color: colors.muted,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.6,
+    width: 56,
+    textAlign: 'right',
     fontFamily: 'PlusJakartaSans_700Bold',
   },
-  // `.tr:not(.trfirst)` default background (tint).
-  rowTinted: {
-    backgroundColor: 'rgba(232, 242, 236, 0.4)',
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 6,
   },
-  // `.tr:not(.trfirst):nth-of-type(even)` override (white).
-  rowWhite: {
-    backgroundColor: '#FFFFFF',
+  dotCol: {
+    width: DOT_COL_WIDTH,
+    alignItems: 'center',
   },
-  // `.tr:last-child { border-bottom: none }`.
-  rowLast: {
-    borderBottomWidth: 0,
+  dot: {
+    width: 14,
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    borderWidth: 3,
+    borderColor: colors.primary,
   },
-  // `.tr.highlight` background.
-  rowHighlight: {
+  dotNext: {
+    width: 18,
+    height: 18,
+    backgroundColor: colors.accent,
+    borderColor: '#fff',
+    borderWidth: 3,
+  },
+  card: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  cardShadow: {
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  cardNext: {
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 6,
   },
-  // `.tdfirst p`.
-  rowName: {
-    fontSize: 15,
+  name: {
+    fontSize: 13.5,
     fontWeight: '700',
     color: colors.foreground,
     fontFamily: 'PlusJakartaSans_700Bold',
   },
-  // `.td` (inherits the row's 15px/600 base; no explicit override).
-  rowTime: {
-    fontSize: 15,
+  nameNext: {
+    color: '#fff',
+  },
+  times: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  adhan: {
+    fontSize: 12,
     fontWeight: '600',
     color: colors.primaryLight,
+    width: 56,
+    textAlign: 'right',
     fontFamily: 'PlusJakartaSans_600SemiBold',
   },
-  // `.tr.highlight .td p` bumps the Adhan column to bold, matching the name
-  // and Iqamah columns' weight once a row is highlighted.
-  rowTimeHighlightWeight: {
+  adhanNext: {
+    color: 'rgba(255,255,255,0.75)',
     fontWeight: '700',
     fontFamily: 'PlusJakartaSans_700Bold',
   },
-  // `.tdlast`.
-  rowIqamah: {
-    fontSize: 15,
+  iqamah: {
+    fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
+    width: 56,
+    textAlign: 'right',
     fontFamily: 'PlusJakartaSans_700Bold',
   },
-  // `.tr.highlight .tdlast p`.
-  rowIqamahHighlight: {
+  iqamahNext: {
     color: colors.accent,
-  },
-  // `.tr.highlight .tdfirst p` / `.tr.highlight .td p` shared color.
-  rowTextHighlight: {
-    color: '#FFFFFF',
   },
 });

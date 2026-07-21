@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FlatList, View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import ScreenHeader from '@/components/ScreenHeader';
+import ArchHeader from '@/components/ArchHeader';
 import SurahListItem from '@/components/quran/SurahListItem';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
@@ -59,7 +59,7 @@ export default function SurahListScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader
+      <ArchHeader
         title="Al-Qur'an Al-Kareem"
         subtitle="114 Surahs · Uthmani & Sahih"
       />
@@ -107,6 +107,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 20,
+    borderWidth: 1,
+    borderColor: colors.hairline,
   },
   summaryLabel: {
     color: colors.muted,

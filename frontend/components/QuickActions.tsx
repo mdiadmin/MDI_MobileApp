@@ -8,7 +8,9 @@ import {
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Svg, { Path } from 'react-native-svg';
 import { colors, shadows } from '@/constants/theme';
+import SectionDots from '@/components/SectionDots';
 
 type QuickAction = {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -35,20 +37,28 @@ export default function QuickActions() {
 
   return (
     <View style={styles.section}>
-      <Text style={styles.title}>Quick Access</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Quick Access</Text>
+        <SectionDots />
+      </View>
 
       <View style={styles.grid}>
         {QUICK_ACTIONS.map(({ icon, label, color, bg, route }) => (
           <TouchableOpacity
             key={label}
-            style={[styles.actionButton, shadows.action, { width: itemWidth }]}
+            style={[styles.actionWrap, { width: itemWidth }]}
             activeOpacity={0.85}
             onPress={route ? () => router.push(route as Href) : undefined}
           >
-            <View style={[styles.iconWrap, { backgroundColor: bg }]}>
-              <MaterialCommunityIcons name={icon} size={20} color={color} />
+            <Svg width={16} height={9} viewBox="0 0 16 9" style={styles.roof}>
+              <Path d="M0,9 L8,0 L16,9 Z" fill={colors.accent} />
+            </Svg>
+            <View style={[styles.actionButton, shadows.action]}>
+              <View style={[styles.iconWrap, { backgroundColor: bg }]}>
+                <MaterialCommunityIcons name={icon} size={20} color={color} />
+              </View>
+              <Text style={styles.label}>{label}</Text>
             </View>
-            <Text style={styles.label}>{label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -61,10 +71,15 @@ const styles = StyleSheet.create({
     marginHorizontal: HORIZONTAL_PADDING,
     marginTop: 20,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
   title: {
     fontSize: 18,
     color: colors.primary,
-    marginBottom: 12,
     fontFamily: 'DMSerifDisplay_400Regular',
   },
   grid: {
@@ -72,15 +87,26 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: GAP,
   },
+  actionWrap: {
+    paddingTop: 8,
+  },
+  roof: {
+    position: 'absolute',
+    top: 0,
+    left: '50%',
+    marginLeft: -8,
+  },
   actionButton: {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: colors.card,
     paddingVertical: 18,
     paddingHorizontal: 8,
     gap: 8,
+    borderWidth: 1,
+    borderColor: colors.hairline,
   },
   iconWrap: {
     width: 44,

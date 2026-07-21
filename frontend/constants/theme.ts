@@ -1,7 +1,8 @@
 export const colors = {
-  background: '#F4F8F5',
+  background: '#FBF8F1',
   foreground: '#0F2C1E',
   primary: '#1B5E38',
+  primaryDark: '#123D26',
   primaryLight: '#4A7A5E',
   muted: '#9AB5A4',
   secondary: '#E8F2EC',
@@ -9,6 +10,7 @@ export const colors = {
   accentBg: '#FBF3E6',
   card: '#ffffff',
   border: 'rgba(27, 94, 56, 0.12)',
+  hairline: 'rgba(201, 147, 58, 0.25)',
 } as const;
 
 export const shadows = {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
-import GeometricPattern from '@/components/GeometricPattern';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import SectionDots from '@/components/SectionDots';
 import { colors, shadows } from '@/constants/theme';
 
 const DONATE_URL = 'https://app.irm.io/daruliman.org';
@@ -21,16 +22,25 @@ export default function DonateBanner() {
     WebBrowser.openBrowserAsync(DONATE_URL);
   };
 
+  const gradientId = useId().replace(/:/g, '');
+
   return (
     <View style={styles.section}>
       <View style={styles.banner}>
-        <GeometricPattern opacity={0.07} />
-        <View style={styles.accentBar} />
+        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+          <Defs>
+            <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={colors.primary} />
+              <Stop offset="1" stopColor={colors.primaryDark} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill={`url(#${gradientId})`} />
+        </Svg>
 
-        <View style={styles.content}>
-          <Text style={styles.title}>Support Our Masjid</Text>
-          <Text style={styles.subtitle}>Every contribution makes a difference.</Text>
-        </View>
+        <SectionDots color={colors.accent} />
+
+        <Text style={styles.title}>Support Our Masjid</Text>
+        <Text style={styles.subtitle}>Every contribution makes a difference.</Text>
 
         <TouchableOpacity
           onPress={handleDonatePress}
@@ -54,37 +64,23 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     borderRadius: 16,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: colors.primary,
     paddingVertical: 20,
     paddingHorizontal: 24,
-  },
-  accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: colors.accent,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-  },
-  content: {
-    flex: 1,
-    zIndex: 10,
-    paddingLeft: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(201,147,58,0.4)',
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     color: '#fff',
+    marginTop: 8,
     fontFamily: 'DMSerifDisplay_400Regular',
   },
   subtitle: {
     color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    marginTop: 3,
+    fontSize: 11.5,
+    marginTop: 4,
     fontFamily: 'PlusJakartaSans_400Regular',
   },
   button: {
@@ -92,9 +88,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 20,
+    marginTop: 14,
     zIndex: 10,
   },
   buttonText: {
