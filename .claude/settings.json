@@ -38,7 +38,16 @@
       "Bash(node scripts/generate-starter-snapshot.js)",
       "Bash(npx eslint *)",
       "Bash(rm -f eslint.config.js)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(node -e \"const p=require.resolve\\('jimp',{paths:[require.resolve\\('@expo/image-utils'\\)]}\\);console.log\\('jimp at',p\\)\")",
+      "Bash(node -e \"const d=require\\('@expo/image-utils/package.json'\\).dependencies;console.log\\(JSON.stringify\\(d,null,1\\)\\)\")",
+      "Bash(node -e \"\\(async\\(\\)=>{const u=require\\('@expo/image-utils'\\);try{const j=await u.jimpAsync\\({input:'assets/images/adaptive-icon.png',output:'assets/images/_test.png',operations:[]}\\);console.log\\('jimpAsync OK', typeof j\\)}catch\\(e\\){console.log\\('jimpAsync FAIL:', e.message.split\\(String.fromCharCode\\(10\\)\\)[0]\\)}}\\)\\(\\)\")",
+      "Bash(node -e \"const p=require.resolve\\('jimp-compact',{paths:['node_modules/@expo/image-utils']}\\);console.log\\(p\\)\")",
+      "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/probe.js\")",
+      "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/probe2.js\")",
+      "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/gen.js\")",
+      "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/probe3.js\")",
+      "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/gen2.js\")"
     ]
   }
 }

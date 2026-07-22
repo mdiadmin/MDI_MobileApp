@@ -1,3 +1,4 @@
+import { Image } from 'react-native';
 import { colors } from '@/constants/theme';
 
 export interface CategoryStyle {
@@ -20,4 +21,26 @@ const DEFAULT_STYLE: CategoryStyle = { bg: colors.secondary, text: colors.primar
 
 export function getCategoryStyle(category: string): CategoryStyle {
   return CATEGORY_STYLES[category] ?? DEFAULT_STYLE;
+}
+
+// Default photo shown wherever a post has no image of its own. Only
+// categories listed here get a photo fallback — everything else keeps the
+// icon placeholder (see CategoryPlaceholder). Resolved to a uri up front
+// (rather than handing expo-image the raw require() id) to match how every
+// other local asset in this feature is passed to expo-image — see
+// services/starterSnapshot.ts.
+const CATEGORY_DEFAULT_IMAGE_IDS: Record<string, number> = {
+  General: require('@/assets/images/general.jpg'),
+  Blog: require('@/assets/images/blog.jpg'),
+  'Jummah Announcements': require('@/assets/images/jummah.jpg'),
+};
+
+const CATEGORY_DEFAULT_IMAGES: Record<string, string> = Object.fromEntries(
+  Object.entries(CATEGORY_DEFAULT_IMAGE_IDS)
+    .map(([category, id]) => [category, Image.resolveAssetSource(id)?.uri])
+    .filter(([, uri]) => !!uri)
+);
+
+export function getCategoryDefaultImage(category: string): string | null {
+  return CATEGORY_DEFAULT_IMAGES[category] ?? null;
 }

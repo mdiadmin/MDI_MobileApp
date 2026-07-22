@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { formatPostDate } from '@/services/announcementsApi';
 import { colors, shadows } from '@/constants/theme';
+import { getCategoryDefaultImage } from '@/constants/announcementsCategories';
 import { PostMeta } from '@/types/announcements';
 import CategoryPlaceholder from './CategoryPlaceholder';
 import { CategoryPill } from './CategoryPill';
@@ -11,11 +12,14 @@ import { CategoryPill } from './CategoryPill';
 // imageUri is pre-resolved by the caller (remote while online, local cache
 // while offline, or undefined) — see FeaturedCard for the same convention.
 function AnnouncementRowImpl({ post, imageUri, onPress }: { post: PostMeta; imageUri?: string; onPress: () => void }) {
+  const defaultImage = getCategoryDefaultImage(post.category);
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={[styles.card, shadows.action]}>
       <View style={styles.thumbnail}>
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.thumbnailImage} contentFit="cover" transition={150} />
+        ) : defaultImage ? (
+          <Image source={{ uri: defaultImage }} style={styles.thumbnailImage} contentFit="cover" />
         ) : (
           <CategoryPlaceholder category={post.category} iconSize={22} style={StyleSheet.absoluteFill} />
         )}

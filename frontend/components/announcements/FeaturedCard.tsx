@@ -5,6 +5,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { formatPostDate } from '@/services/announcementsApi';
 import { colors, shadows } from '@/constants/theme';
+import { getCategoryDefaultImage } from '@/constants/announcementsCategories';
 import { PostMeta } from '@/types/announcements';
 import CategoryPlaceholder from './CategoryPlaceholder';
 import { CategoryPill } from './CategoryPill';
@@ -12,12 +13,16 @@ import { CategoryPill } from './CategoryPill';
 function ImageGradientOverlay() {
   const gradientId = useId().replace(/:/g, '');
   return (
-    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
+        {/* Alpha must be given via stopOpacity, not baked into an rgba()
+            stopColor — react-native-svg drops the alpha channel there and
+            renders every stop fully opaque, which paints the whole card a
+            solid dark green and hides the image behind it. */}
         <LinearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
-          <Stop offset="0" stopColor="rgba(15,44,30,0.9)" />
-          <Stop offset="0.6" stopColor="rgba(15,44,30,0.2)" />
-          <Stop offset="1" stopColor="rgba(15,44,30,0)" />
+          <Stop offset="0" stopColor="#0F2C1E" stopOpacity={0.9} />
+          <Stop offset="0.6" stopColor="#0F2C1E" stopOpacity={0.2} />
+          <Stop offset="1" stopColor="#0F2C1E" stopOpacity={0} />
         </LinearGradient>
       </Defs>
       <Rect width="100%" height="100%" fill={`url(#${gradientId})`} />
@@ -30,11 +35,14 @@ function ImageGradientOverlay() {
 // available — in which case a category placeholder fills the space instead
 // of leaving it blank.
 export default function FeaturedCard({ post, imageUri, onPress }: { post: PostMeta; imageUri?: string; onPress: () => void }) {
+  const defaultImage = getCategoryDefaultImage(post.category);
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={[styles.card, shadows.card]}>
       <View style={styles.imageWrap}>
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.image} contentFit="cover" transition={150} />
+        ) : defaultImage ? (
+          <Image source={{ uri: defaultImage }} style={styles.image} contentFit="cover" />
         ) : (
           <CategoryPlaceholder category={post.category} iconSize={40} style={StyleSheet.absoluteFill} />
         )}
