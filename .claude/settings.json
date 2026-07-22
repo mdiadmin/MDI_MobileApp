@@ -53,7 +53,9 @@
       "WebFetch(domain:mdisports.skedda.com)",
       "WebFetch(domain:pdf.ac)",
       "WebFetch(domain:www.pdffiller.com)",
-      "Bash(echo \"EXIT_CODE=$?\")"
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "PowerShell(git log -S \"Platform.OS === `\"android`\"\" --oneline -- \"frontend/app/\\(tabs\\)/QiblaFinder.tsx\")",
+      "PowerShell(Set-Location frontend; npx tsc --noEmit 2>$null; \"tsc exit: $LASTEXITCODE\")"
     ]
   }
 }

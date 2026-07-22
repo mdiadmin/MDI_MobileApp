@@ -22,6 +22,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
   withRepeat,
   Easing,
 } from "react-native-reanimated";
@@ -172,8 +173,14 @@ export default function QiblaFinder() {
     const unwrappedTarget = continuousRotationRef.current + rotationDelta;
     continuousRotationRef.current = unwrappedTarget;
 
-    dialRotation.value = withTiming(unwrappedTarget, {
-      duration: 60,
+    // The dial is retargeted on every sensor sample (~30Hz). A spring carries
+    // its velocity across retargets so the pursuit stays fluid; a timing
+    // animation restarts from zero velocity each sample, which reads as jitter.
+    dialRotation.value = withSpring(unwrappedTarget, {
+      mass: 1,
+      stiffness: 250,
+      damping: 32,
+      overshootClamping: true,
     });
 
     checkAlignment(fusedHeading);
