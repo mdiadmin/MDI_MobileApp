@@ -6,6 +6,7 @@ import { formatPostDate } from '@/services/announcementsApi';
 import { computeContentRichness } from '@/services/htmlContent';
 import { colors, shadows } from '@/constants/theme';
 import { ContentNode, ImageResolver, PostMeta } from '@/types/announcements';
+import { getCategoryDefaultImage } from '@/constants/announcementsCategories';
 import { CategoryPill } from './CategoryPill';
 import CategoryPlaceholder from './CategoryPlaceholder';
 import OfflineUnavailable from './OfflineUnavailable';
@@ -33,6 +34,8 @@ export default function PostReader({ meta, headerImageUri, content, loading, onR
   const [aspectRatio, setAspectRatio] = useState<number | null>(null);
   useEffect(() => setAspectRatio(null), [headerImageUri]);
 
+  const defaultImage = useMemo(() => getCategoryDefaultImage(meta.category), [meta.category]);
+
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
       <View style={styles.headerImageWrap}>
@@ -46,6 +49,12 @@ export default function PostReader({ meta, headerImageUri, content, loading, onR
               const { width, height } = e.source;
               if (width && height) setAspectRatio(width / height);
             }}
+          />
+        ) : defaultImage ? (
+          <Image
+            source={{ uri: defaultImage }}
+            style={[styles.headerImage, styles.headerImageFallback]}
+            contentFit="cover"
           />
         ) : (
           <CategoryPlaceholder category={meta.category} iconSize={36} style={[styles.headerImage, styles.headerImageFallback]} />
