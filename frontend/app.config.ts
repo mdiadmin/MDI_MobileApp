@@ -29,9 +29,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: "portrait",
   scheme: "frontend",
   userInterfaceStyle: "automatic",
-  icon: "./assets/images/MDI_logo_no_background.png",
+  icon: "./assets/images/icon-emblem.png",
   ios: {
-    icon: "./assets/images/MDI_logo_no_background.png",
+    icon: "./assets/images/icon-emblem.png",
     bundleIdentifier: "com.mdi-admin.mdimobileapp",
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
@@ -42,8 +42,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/MDI_logo_no_background.png",
+      backgroundColor: "#0B9444",
+      foregroundImage: "./assets/images/adaptive-emblem-fg.png",
     },
     predictiveBackGestureEnabled: false,
     package: "com.mdiadminsorganization.mdimobileapp",
