@@ -12,6 +12,7 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 const TAB_ICONS: Record<string, IconName> = {
   index: 'home-variant',
   Announcements: 'bullhorn-outline',
+  bookings: 'calendar-check-outline',
   quran: 'book-open-variant',
   QiblaFinder: 'compass-outline',
   Settings: 'cog-outline',
@@ -90,6 +91,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="Announcements" options={{ title: 'Announcements' }} />
+      <Tabs.Screen name="bookings" options={{ title: 'Bookings' }} />
       <Tabs.Screen name="quran" options={{ title: 'Quran' }} />
       <Tabs.Screen name="QiblaFinder" options={{ title: 'Qibla' }} />
       <Tabs.Screen name="Settings" options={{ title: 'Settings' }} />

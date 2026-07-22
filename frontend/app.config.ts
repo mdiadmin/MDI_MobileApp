@@ -21,6 +21,16 @@ const WP_POSTS_URL =
 const ADDIN_API_KEY =
   "WVeh6FdhekwxiEiaxhKGsvy7sOh9V4Y6rWDt2vyoFvvMAFQ2eqxYBePjW1EXEAOL8jr6j0cddjcCJRZRAtrobKmXDy7BCEqi";
 
+// Google Apps Script "Web app" URL that receives booking submissions (ends in
+// /exec). Paste it here after deploying backend/bookings-apps-script — see
+// BOOKINGS_START_HERE.md. While empty, the Bookings forms show a friendly
+// "not available yet" message instead of failing.
+const BOOKINGS_ENDPOINT = "";
+
+// Must match SHARED_SECRET in the Apps Script CONFIG block. Not a strong secret
+// (it ships in the app) — it only deters random/spam POSTs to the endpoint.
+const BOOKINGS_SECRET = "CHANGE-ME-to-match-the-apps-script";
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "MDI Mobile App",
@@ -92,6 +102,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     oneSignalAppId: "1848012c-7b3b-4974-a183-76afa8f84bb1",
     wpPostsUrl: WP_POSTS_URL,
     adDinApiKey: ADDIN_API_KEY,
+    bookingsEndpoint: BOOKINGS_ENDPOINT,
+    bookingsSecret: BOOKINGS_SECRET,
   },
   owner: "mdiadmins-organization",
   runtimeVersion: {

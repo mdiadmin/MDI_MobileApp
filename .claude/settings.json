@@ -47,7 +47,13 @@
       "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/probe2.js\")",
       "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/gen.js\")",
       "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/probe3.js\")",
-      "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/gen2.js\")"
+      "Bash(node \"C:/Users/rahbi/AppData/Local/Temp/claude/c--Code-WORK-MDI-2-MDI-MobileApp/5e585974-3469-467e-991a-5090b673788a/scratchpad/gen2.js\")",
+      "WebFetch(domain:daruliman.org)",
+      "WebFetch(domain:www.icmsportscomplex.com)",
+      "WebFetch(domain:mdisports.skedda.com)",
+      "WebFetch(domain:pdf.ac)",
+      "WebFetch(domain:www.pdffiller.com)",
+      "Bash(echo \"EXIT_CODE=$?\")"
     ]
   }
 }
