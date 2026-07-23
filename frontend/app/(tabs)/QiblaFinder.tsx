@@ -109,9 +109,23 @@ export default function QiblaFinder() {
   const [isFlat, setIsFlat] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
 
+  const [needsCalibration, setNeedsCalibration] = useState(false);
+
   const interferenceRef = useRef(false);
   const interferenceClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const needsCalibrationRef = useRef(false);
+  const calibShowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const calibClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatRef = useRef(false);
+
+  // The gyroscope's yaw sign is learned at runtime by correlating it against
+  // the magnetometer (conventions have proven unreliable to assume across
+  // devices). 0 = not yet known: the gyro contributes nothing and the dial
+  // follows the smoothed magnetometer, exactly like the gyro-stall fallback.
+  const gyroSignRef = useRef<0 | 1 | -1>(0);
+  const gyroCorrRef = useRef(0);
+  const gyroYawAccumRef = useRef(0);
+  const lastRawHeadingRef = useRef<number | null>(null);
 
   const dialRotation = useSharedValue(0);
   const pulseScale = useSharedValue(1);
@@ -298,6 +312,9 @@ export default function QiblaFinder() {
             if (typeof parsed.declination === "number") {
               declinationRef.current = parsed.declination;
             }
+            if (parsed.gyroSign === 1 || parsed.gyroSign === -1) {
+              gyroSignRef.current = parsed.gyroSign;
+            }
             setLoading(false);
           }
         }
@@ -328,6 +345,52 @@ export default function QiblaFinder() {
     useCallback(() => {
       let stopped = false;
       let subs: { remove: () => void }[] = [];
+      let osHeadingSub: { remove: () => void } | null = null;
+      let sensorGen = 0;
+
+      // The OS heading watch never drives the dial (on Android it's the same
+      // magnetometer at a much lower rate). It provides two things the raw
+      // sensor API doesn't: the OS's own compass-accuracy verdict (0-3 on both
+      // platforms; <=1 means "calibrate me") and a continuously fresh
+      // declination.
+      function handleOsHeading(h: Location.LocationHeadingObject) {
+        if (stopped) return;
+
+        if (h.trueHeading !== -1 && h.magHeading !== -1) {
+          let offset = h.trueHeading - h.magHeading;
+          if (offset > 180) offset -= 360;
+          if (offset < -180) offset += 360;
+          declinationRef.current = offset;
+        }
+
+        if (h.accuracy <= 1) {
+          if (calibClearTimerRef.current) {
+            clearTimeout(calibClearTimerRef.current);
+            calibClearTimerRef.current = null;
+          }
+          // Debounce showing: iOS reports accuracy 0 for a moment right after
+          // the sensor starts, which shouldn't flash the banner.
+          if (!needsCalibrationRef.current && !calibShowTimerRef.current) {
+            calibShowTimerRef.current = setTimeout(() => {
+              calibShowTimerRef.current = null;
+              needsCalibrationRef.current = true;
+              setNeedsCalibration(true);
+            }, 1500);
+          }
+        } else {
+          if (calibShowTimerRef.current) {
+            clearTimeout(calibShowTimerRef.current);
+            calibShowTimerRef.current = null;
+          }
+          if (needsCalibrationRef.current && !calibClearTimerRef.current) {
+            calibClearTimerRef.current = setTimeout(() => {
+              calibClearTimerRef.current = null;
+              needsCalibrationRef.current = false;
+              setNeedsCalibration(false);
+            }, 2000);
+          }
+        }
+      }
 
       function updateGravity(accel: { x: number; y: number; z: number }) {
         const E = Math.sqrt(accel.x * accel.x + accel.y * accel.y);
@@ -401,6 +464,41 @@ export default function QiblaFinder() {
         rawHeading += declinationRef.current;
         rawHeading = normalizeAngle(rawHeading);
 
+        // Learn the gyro's yaw sign by correlating the yaw it integrated since
+        // the last sample with how the magnetometer heading actually moved
+        // over the same interval. Consistent agreement drives the correlation
+        // score positive, consistent disagreement negative; jitter while
+        // stationary cancels out and the decay keeps the score bounded. The
+        // sign follows the score once it clears the threshold, so a wrong
+        // (e.g. stale-cached) sign self-corrects with continued rotation.
+        if (lastRawHeadingRef.current != null) {
+          const dMag = shortestAngleDiff(lastRawHeadingRef.current, rawHeading);
+          const gyroMove = gyroYawAccumRef.current;
+          gyroYawAccumRef.current = 0;
+          if (Math.abs(dMag) > 0.05 && Math.abs(gyroMove) > 0.05) {
+            gyroCorrRef.current = Math.max(
+              -500,
+              Math.min(500, gyroCorrRef.current * 0.999 + dMag * gyroMove)
+            );
+            if (Math.abs(gyroCorrRef.current) > 60) {
+              const sign: 1 | -1 = gyroCorrRef.current > 0 ? 1 : -1;
+              if (sign !== gyroSignRef.current) {
+                gyroSignRef.current = sign;
+                console.log(`[Qibla] gyro yaw sign calibrated: ${sign}`);
+                AsyncStorage.getItem(CACHE_KEY)
+                  .then((cached) => {
+                    if (!cached) return;
+                    const parsed = JSON.parse(cached);
+                    parsed.gyroSign = sign;
+                    return AsyncStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
+                  })
+                  .catch(() => {});
+              }
+            }
+          }
+        }
+        lastRawHeadingRef.current = rawHeading;
+
         if (magHeadingRef.current === null) {
           magHeadingRef.current = rawHeading;
           if (fusedHeadingRef.current === null) {
@@ -467,16 +565,21 @@ export default function QiblaFinder() {
           const dt = Math.min((now - lastTime) / 1000, 0.2); // clamp in case of a stall
           const g = gravityRef.current;
           const gNorm = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z) || 1;
-          const upX = g.x / gNorm;
-          const upY = g.y / gNorm;
-          const upZ = g.z / gNorm;
+          const downX = g.x / gNorm;
+          const downY = g.y / gNorm;
+          const downZ = g.z / gNorm;
 
-          let yawRateDeg = (data.x * upX + data.y * upY + data.z * upZ) * (180 / Math.PI);
+          // Yaw rate = rotation rate projected onto the vertical (gravity)
+          // axis. Its sign relative to compass heading is *learned* from the
+          // magnetometer (see updateMagHeading) rather than hardcoded; until
+          // learned, the sign is 0 and the fusion below reduces to smoothly
+          // following the magnetometer heading.
+          const projectedYawDeg =
+            (data.x * downX + data.y * downY + data.z * downZ) * (180 / Math.PI);
 
-          // The gravity/up vector is normalized to the iOS convention above, so the
-          // yaw projection is flipped on every platform (this is behavior-preserving
-          // for the gyro on both iOS and Android).
-          yawRateDeg = -yawRateDeg;
+          gyroYawAccumRef.current += projectedYawDeg * dt;
+
+          const yawRateDeg = projectedYawDeg * gyroSignRef.current;
 
           const previousFused = fusedHeadingRef.current ?? magHeadingRef.current;
           const gyroIntegrated = normalizeAngle(previousFused + yawRateDeg * dt);
@@ -494,14 +597,35 @@ export default function QiblaFinder() {
         });
 
         subs = [magSub, accelSub, gyroSub];
+
+        // Best-effort: if the watch can't start (e.g. permission not granted
+        // yet), the compass still runs — we just lose the calibration hint
+        // and live declination refresh.
+        const gen = ++sensorGen;
+        Location.watchHeadingAsync(handleOsHeading)
+          .then((sub) => {
+            if (stopped || gen !== sensorGen) {
+              sub.remove();
+              return;
+            }
+            osHeadingSub = sub;
+          })
+          .catch(() => {});
       }
 
       function stopSensors() {
         subs.forEach((s) => s.remove());
         subs = [];
+        sensorGen++; // invalidates a heading subscription still resolving
+        if (osHeadingSub) {
+          osHeadingSub.remove();
+          osHeadingSub = null;
+        }
         // Reset fusion state so resuming (next focus/foreground) re-syncs
         // cleanly from a fresh magnetometer reading instead of a stale fuse.
         lastGyroTimeRef.current = null;
+        gyroYawAccumRef.current = 0;
+        lastRawHeadingRef.current = null;
       }
 
       startSensors();
@@ -533,6 +657,14 @@ export default function QiblaFinder() {
         if (interferenceClearTimerRef.current) {
           clearTimeout(interferenceClearTimerRef.current);
           interferenceClearTimerRef.current = null;
+        }
+        if (calibShowTimerRef.current) {
+          clearTimeout(calibShowTimerRef.current);
+          calibShowTimerRef.current = null;
+        }
+        if (calibClearTimerRef.current) {
+          clearTimeout(calibClearTimerRef.current);
+          calibClearTimerRef.current = null;
         }
       };
     }, [applyHeading])
@@ -613,6 +745,15 @@ export default function QiblaFinder() {
           <Text style={styles.interferenceText}>
             Magnetic interference detected. Move away from metal or electronics
             for an accurate reading.
+          </Text>
+        </View>
+      )}
+
+      {needsCalibration && !interference && (
+        <View style={styles.interferenceBanner}>
+          <Text style={styles.interferenceText}>
+            Compass accuracy is low. Calibrate by moving your phone in a
+            figure-8 motion for a few seconds.
           </Text>
         </View>
       )}
