@@ -29,7 +29,7 @@ const BOOKINGS_ENDPOINT = "";
 
 // Must match SHARED_SECRET in the Apps Script CONFIG block. Not a strong secret
 // (it ships in the app) — it only deters random/spam POSTs to the endpoint.
-const BOOKINGS_SECRET = "CHANGE-ME-to-match-the-apps-script";
+const BOOKINGS_SECRET = "";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,

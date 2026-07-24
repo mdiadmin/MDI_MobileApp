@@ -14,7 +14,7 @@
 var CONFIG = {
   // A made-up password. Must EXACTLY match `bookingsSecret` in the app's
   // frontend/app.config.ts. Anything else is rejected.
-  SHARED_SECRET: 'CHANGE-ME-to-a-long-random-string',
+  SHARED_SECRET: '',
 
   // Everyday service notifications (Facility, Enrollment, ...).
   BOOKINGS_EMAIL: 'bookings@example.com',
@@ -29,7 +29,7 @@ var CONFIG = {
 
   // Optional calendar for time-based bookings (Facility). Leave disabled until
   // you've created a calendar and pasted its ID.
-  ENABLE_CALENDAR: false,
+  ENABLE_CALENDAR: true,
   CALENDAR_ID: '' // e.g. 'abc123@group.calendar.google.com' or 'primary'
 };
 // ──────────────────────────────────────────────────────────────────
@@ -74,6 +74,18 @@ function json(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Guards a cell value before it's written to a sheet. Google Sheets evaluates
+// any cell whose text starts with = + - @ (or a leading tab/CR) as a formula —
+// so a note like "+ $500 deposit" becomes #ERROR!, a phone number "+1..." gets
+// mangled, and a malicious "=..." is a formula-injection risk in a sheet staff
+// open. Prefixing a single quote forces Sheets to store it as literal text (the
+// quote itself is not displayed, and getValues() reads it back clean).
+// Non-strings (numbers, Dates) pass through untouched.
+function safeCell(v) {
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(v)) return "'" + v;
+  return v;
 }
 
 // e.g. FAC-20260722-143005
@@ -123,7 +135,7 @@ function writeRow(formType, serviceLabel, reference, fields) {
     if (h === 'Reference #') return reference;
     if (h === 'Status') return 'New';
     if (h === 'Assigned To' || h === 'Staff Notes') return '';
-    return Object.prototype.hasOwnProperty.call(fields, h) ? fields[h] : '';
+    return Object.prototype.hasOwnProperty.call(fields, h) ? safeCell(fields[h]) : '';
   });
   sheet.appendRow(row);
 }
@@ -190,7 +202,7 @@ function ensurePricingSheet() {
     sheet.appendRow(PRICING_HEADERS);
     sheet.getRange(1, 1, 1, PRICING_HEADERS.length).setFontWeight('bold');
     sheet.setFrozenRows(1);
-    DEFAULT_PRICING_ROWS.forEach(function (r) { sheet.appendRow(r); });
+    DEFAULT_PRICING_ROWS.forEach(function (r) { sheet.appendRow(r.map(safeCell)); });
   }
   return sheet;
 }

@@ -56,7 +56,9 @@
       "Bash(echo \"EXIT_CODE=$?\")",
       "PowerShell(git log -S \"Platform.OS === `\"android`\"\" --oneline -- \"frontend/app/\\(tabs\\)/QiblaFinder.tsx\")",
       "PowerShell(Set-Location frontend; npx tsc --noEmit 2>$null; \"tsc exit: $LASTEXITCODE\")",
-      "Bash(echo \"---exit=$?---\")"
+      "Bash(echo \"---exit=$?---\")",
+      "Bash(curl -sL https://script.google.com/macros/s/AKfycby237hse13ksXRVYfcrLoAmnPA8l3TeksSSlSnXq2nMToxVQdd0Btv1tBwJcWkY7vATQQ/exec)",
+      "Bash(curl -sL https://script.google.com/macros/s/AKfycby237hse13ksXRVYfcrLoAmnPA8l3TeksSSlSnXq2nMToxVQdd0Btv1tBwJcWkY7vATQQ/exec?config=pricing)"
     ]
   }
 }
