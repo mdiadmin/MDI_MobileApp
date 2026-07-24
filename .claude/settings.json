@@ -58,7 +58,8 @@
       "PowerShell(Set-Location frontend; npx tsc --noEmit 2>$null; \"tsc exit: $LASTEXITCODE\")",
       "Bash(echo \"---exit=$?---\")",
       "Bash(curl -sL https://script.google.com/macros/s/AKfycby237hse13ksXRVYfcrLoAmnPA8l3TeksSSlSnXq2nMToxVQdd0Btv1tBwJcWkY7vATQQ/exec)",
-      "Bash(curl -sL https://script.google.com/macros/s/AKfycby237hse13ksXRVYfcrLoAmnPA8l3TeksSSlSnXq2nMToxVQdd0Btv1tBwJcWkY7vATQQ/exec?config=pricing)"
+      "Bash(curl -sL https://script.google.com/macros/s/AKfycby237hse13ksXRVYfcrLoAmnPA8l3TeksSSlSnXq2nMToxVQdd0Btv1tBwJcWkY7vATQQ/exec?config=pricing)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const d={...p.dependencies,...p.devDependencies}; console.log\\('datetimepicker:', d['@react-native-community/datetimepicker']||'—'\\); console.log\\('expo:', d['expo']\\); console.log\\('react-native:', d['react-native']\\); const picks=Object.keys\\(d\\).filter\\(k=>/date|time|picker|calendar/i.test\\(k\\)\\); console.log\\('date/picker-ish deps:', picks.length?picks.join\\(', '\\):'none'\\);\")"
     ]
   }
 }
