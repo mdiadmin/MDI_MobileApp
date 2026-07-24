@@ -57,6 +57,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     predictiveBackGestureEnabled: false,
     package: "com.mdiadminsorganization.mdimobileapp",
+    // Prayer reminders must fire at the exact adhan time. Without an
+    // exact-alarm permission, Android 12+ treats expo-notifications' DATE
+    // triggers as *inexact* alarms, which Doze / OEM battery managers batch
+    // and delay (often 15-30 min) — that's the "fires after the prayer time"
+    // bug on aggressive-battery devices. We use USE_EXACT_ALARM (not
+    // SCHEDULE_EXACT_ALARM): it is auto-granted with no runtime prompt, and
+    // Google Play explicitly permits it for apps whose core function is
+    // exact-time alarms — a prayer-time reminder app qualifies.
+    permissions: ["android.permission.USE_EXACT_ALARM"],
   },
   web: {
     output: "static",

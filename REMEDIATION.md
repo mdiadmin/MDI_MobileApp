@@ -52,6 +52,30 @@ Legend: 🔴 P0 release blocker · 🟠 P1 security/compliance · 🟡 P2 perfor
 
 ## Notes
 
+- **Adhan notifications — device bug fixes (2026-07-24):** two separate
+  symptoms, both in the local scheduler (not OneSignal/Announcements).
+  - *Fires late on some devices (e.g. 5:00 adhan arriving ~5:26).* Root cause:
+    without an exact-alarm permission, Android 12+ schedules `expo-notifications`
+    DATE triggers as **inexact** alarms, which Doze / aggressive-OEM battery
+    managers delay. #10 dropped `SCHEDULE_EXACT_ALARM` — correct for *that*
+    permission (Play-rejection risk), but it left punctuality broken. **Fix:**
+    added `android.permission.USE_EXACT_ALARM` in `app.config.ts` — auto-granted,
+    no runtime prompt, and Play-policy-permitted for exact-alarm-core apps like a
+    prayer-time reminder. **Do not re-remove it.** Needs a native rebuild (EAS /
+    `expo run:android`), not an OTA update.
+  - *Duplicate adhan on in-place-upgraded devices.* Builds before the identifier
+    refactor scheduled notifications with no `identifier` (random UUIDs), which
+    `cancelOwnedPrayerNotifications()`'s prefix filter can't clear, so they fire
+    alongside the new `prayer-notif:` ones. **Fix:** `runLegacyCleanupOnce()` in
+    `PrayerNotifications.tsx` clears all scheduled notifications exactly once per
+    install (guarded by `@prayer_notifications_legacy_cleanup_done`) before the
+    normal prefixed reschedule. Safe because adhan reminders are the only local
+    notifications this app schedules.
+  - *Still open (latent):* `combineDateTime` builds the fire time in the
+    device's timezone, but the portal returns the masjid's (Eastern) wall-clock
+    times — adhan fires at the wrong moment for a device not on Eastern time.
+    Not the cause of either symptom above; fix separately if it matters.
+
 - No device/simulator was available during remediation; sensor-behavior fixes
   (#1, #2, #3, #15) are verified by reading the code paths, not by running on
   hardware. Flagged individually below if device verification is still needed.
@@ -96,7 +120,8 @@ Legend: 🔴 P0 release blocker · 🟠 P1 security/compliance · 🟡 P2 perfor
   `mode` now derives from `APP_VARIANT` (set per-profile in `eas.json`);
   added `NSLocationWhenInUseUsageDescription` / `NSMotionUsageDescription`;
   `SCHEDULE_EXACT_ALARM` permission dropped entirely (not required —
-  `expo-notifications` DATE triggers don't need it); the WordPress URL and
+  `expo-notifications` DATE triggers don't need it *to schedule*);
+  the WordPress URL and
   ad-din API key moved to `extra` so they're config, not inline strings.
   **#6 is only partially fixed**: the URL still points at
   `daruliman.org/mystaging02` because the real production endpoint isn't

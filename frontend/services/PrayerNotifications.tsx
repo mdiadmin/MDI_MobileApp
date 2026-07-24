@@ -22,6 +22,16 @@ const NOTIF_ID_PREFIX = 'prayer-notif:';
 const LAST_REFRESH_KEY = '@prayer_notifications_last_refresh';
 const REFRESH_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
+// One-time migration flag. Builds before the identifier refactor scheduled
+// adhan notifications with no identifier, so expo assigned each a random UUID.
+// Those legacy notifications don't match NOTIF_ID_PREFIX, so
+// cancelOwnedPrayerNotifications() can't clear them — on an in-place upgrade
+// they keep firing next to the new prefixed ones (the duplicate-adhan bug).
+// Once, we clear every scheduled notification to sweep the strays; since adhan
+// reminders are the only local notifications this app schedules (OneSignal is
+// push, not locally scheduled), a full clear is safe here.
+const LEGACY_CLEANUP_KEY = '@prayer_notifications_legacy_cleanup_done';
+
 // The five daily prayers we schedule reminders for (the API also returns
 // Sunrise/Sunset/Zawal/Jumah, which we skip).
 const NOTIFY_PRAYERS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
@@ -85,6 +95,14 @@ async function cancelOwnedPrayerNotifications() {
 export async function cancelPrayerNotifications() {
   await cancelOwnedPrayerNotifications();
   await AsyncStorage.removeItem(LAST_REFRESH_KEY);
+}
+
+// See LEGACY_CLEANUP_KEY for the why. Clears all scheduled notifications once
+// per install, then records that it has done so.
+async function runLegacyCleanupOnce() {
+  if (await AsyncStorage.getItem(LEGACY_CLEANUP_KEY)) return;
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  await AsyncStorage.setItem(LEGACY_CLEANUP_KEY, 'true');
 }
 
 // In-flight guard so an overlapping call (e.g. a foreground event firing
@@ -197,6 +215,10 @@ export async function setPrayerNotificationsEnabled(value: boolean): Promise<boo
 // directly) — this function only refreshes an *already-made* decision, so it
 // never itself triggers the OS permission dialog.
 export async function initPrayerNotifications() {
+  // One-time post-upgrade migration, run early and independent of feature
+  // state so its blast radius stays inside the narrow window it's meant for.
+  await runLegacyCleanupOnce();
+
   const decided = await hasPrayerNotificationDecision();
   if (!decided) return;
 
